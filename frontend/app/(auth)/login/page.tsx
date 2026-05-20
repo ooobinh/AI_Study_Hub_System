@@ -4,6 +4,8 @@ import { motion } from "framer-motion"
 import { useState } from "react"
 import { Sparkles, Mail, Lock, User, Github, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/providers/auth-provider"
+import { getNetworkErrorMessage } from "@/lib/api"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -11,11 +13,33 @@ export default function AuthPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
+  const { login, register } = useAuth()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    router.push("/dashboard")
+    setError("")
+
+    if (!email.trim() || !password.trim() || (!isLogin && !name.trim())) {
+      setError(isLogin ? "Please enter email and password." : "Please enter your name, email, and password.")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      if (isLogin) {
+        await login(email.trim(), password)
+      } else {
+        await register(name.trim(), email.trim(), password)
+      }
+      router.push("/dashboard")
+    } catch (err) {
+      setError(getNetworkErrorMessage(err))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -119,6 +143,7 @@ export default function AuthPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="John Doe"
+                  required={!isLogin}
                   className="w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                 />
               </div>
@@ -138,6 +163,7 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@university.edu"
+                  required
                   className="w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                 />
               </div>
@@ -157,6 +183,8 @@ export default function AuthPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
+                  required
+                  minLength={6}
                   className="w-full pl-11 pr-12 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                 />
                 <button
@@ -183,17 +211,28 @@ export default function AuthPage() {
               </motion.div>
             )}
 
+            {error && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {error}
+              </motion.p>
+            )}
+
             {/* Submit Button */}
             <motion.button
               type="submit"
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 glow-primary"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              disabled={isSubmitting}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 glow-primary disabled:cursor-not-allowed disabled:opacity-60"
+              whileHover={isSubmitting ? {} : { scale: 1.02 }}
+              whileTap={isSubmitting ? {} : { scale: 0.98 }}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              {isLogin ? "Sign In" : "Create Account"}
+              {isSubmitting ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
               <ArrowRight className="w-4 h-4" />
             </motion.button>
           </form>

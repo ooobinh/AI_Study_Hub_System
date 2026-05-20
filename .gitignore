@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+*.log
+backend/target/
+backend/uploads/
+frontend/.next/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+supabase-service-role*.txt

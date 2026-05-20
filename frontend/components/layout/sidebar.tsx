@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSidebar } from "@/components/providers/sidebar-provider"
+import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -26,13 +27,15 @@ const navItems = [
   { icon: MessageSquare, label: "AI Chat", href: "/chat" },
   { icon: BarChart3, label: "Analytics", href: "/analytics" },
   { icon: User, label: "Profile", href: "/profile" },
-  { icon: Shield, label: "Admin", href: "/admin" },
+  { icon: Shield, label: "Admin", href: "/admin", adminOnly: true },
   { icon: Settings, label: "Settings", href: "/settings" },
 ]
 
 export function Sidebar() {
   const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar()
+  const { user } = useAuth()
   const pathname = usePathname()
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.roles.includes("ADMIN"))
 
   const sidebarVariants = {
     expanded: { width: 260 },
@@ -68,7 +71,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link key={item.href} href={item.href} onClick={() => setIsMobileOpen(false)}>

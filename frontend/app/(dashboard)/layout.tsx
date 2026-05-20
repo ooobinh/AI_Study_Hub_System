@@ -1,6 +1,9 @@
 "use client"
 
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { SidebarProvider } from "@/components/providers/sidebar-provider"
+import { useAuth } from "@/components/providers/auth-provider"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TopNav } from "@/components/layout/top-nav"
 import { FloatingAssistant } from "@/components/layout/floating-assistant"
@@ -10,6 +13,23 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  const { user, isLoading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace("/login")
+    }
+  }, [isLoading, router, user])
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading...
+      </div>
+    )
+  }
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen bg-background gradient-mesh">

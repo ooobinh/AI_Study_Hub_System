@@ -162,7 +162,7 @@ The system aims to:
 
 \* File Preview
 
-\* Firebase Cloud Storage Integration
+\* Supabase Storage Integration
 
 \* Secure File Access
 
@@ -266,7 +266,7 @@ The system aims to:
 
 
 
-\* MySQL
+\* SQL Server
 
 \---
 
@@ -278,7 +278,7 @@ The system aims to:
 
 \* Google Gemini API
 
-\* Firebase Storage
+\* Supabase Storage
 
 
 
@@ -320,7 +320,7 @@ REST API (Spring Boot)
 
 &#x20;           ↓
 
-MySQL Database
+SQL Server Database
 
 
 
@@ -328,7 +328,7 @@ External Services:
 
 \- Gemini API
 
-\- Firebase Storage
+\- Supabase Storage
 
 ```
 

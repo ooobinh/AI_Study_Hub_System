@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useState } from "react"
+import { useAuth } from "@/components/providers/auth-provider"
 import {
   User,
   Mail,
@@ -66,7 +66,10 @@ const subjects = [
 ]
 
 export default function ProfilePage() {
-  const [isEditing, setIsEditing] = useState(false)
+  const { user } = useAuth()
+  const displayName = user?.name || "Student"
+  const major = user?.major || "Student"
+  const university = user?.university || "University"
 
   return (
     <motion.div
@@ -119,16 +122,16 @@ export default function ProfilePage() {
               </motion.div>
 
               <div className="space-y-1 md:pb-2">
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">Alex Chen</h1>
-                <p className="text-muted-foreground">Computer Science Student</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground">{displayName}</h1>
+                <p className="text-muted-foreground">{major} Student</p>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground pt-1">
                   <span className="flex items-center gap-1">
                     <Mail className="w-4 h-4" />
-                    alex.chen@university.edu
+                    {user?.email || "No email"}
                   </span>
                   <span className="flex items-center gap-1">
                     <MapPin className="w-4 h-4" />
-                    San Francisco, CA
+                    {university}
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
@@ -166,9 +169,9 @@ export default function ProfilePage() {
             transition={{ delay: 0.3 }}
           >
             <p className="text-muted-foreground leading-relaxed">
-              Passionate about artificial intelligence and machine learning. Currently pursuing a degree in Computer Science 
-              with a focus on deep learning and natural language processing. Always eager to learn and collaborate on 
-              innovative projects.
+              {user?.major
+                ? `${displayName} is currently studying ${user.major}${user.university ? ` at ${user.university}` : ""}.`
+                : "No profile bio has been added yet."}
             </p>
           </motion.div>
         </div>

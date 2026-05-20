@@ -1,9 +1,11 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { Search, Bell, User, Command } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LanguageSwitcher } from "@/components/layout/language-switcher"
+import { useAuth } from "@/components/providers/auth-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +16,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export function TopNav() {
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = () => {
+    logout()
+    router.replace("/login")
+  }
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -65,8 +75,8 @@ export function TopNav() {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium text-foreground">Alex Chen</span>
-                <span className="text-xs text-muted-foreground">Student</span>
+                <span className="text-sm font-medium text-foreground">{user?.name || "Student"}</span>
+                <span className="text-xs text-muted-foreground">{user?.email || "Signed in"}</span>
               </div>
             </motion.button>
           </DropdownMenuTrigger>
@@ -83,7 +93,10 @@ export function TopNav() {
               Billing
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border/50" />
-            <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer">
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive cursor-pointer"
+            >
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>

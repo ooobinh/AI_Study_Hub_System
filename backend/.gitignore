@@ -1,0 +1,5 @@
+target/
+uploads/
+.env
+supabase-service-role*.txt
+*.log

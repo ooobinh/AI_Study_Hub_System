@@ -1,6 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { useEffect, useState } from "react"
+import { useAuth } from "@/components/providers/auth-provider"
+import { getApiUrl } from "@/lib/api"
 import {
   FileText,
   MessageSquare,
@@ -16,32 +19,19 @@ import {
   Star
 } from "lucide-react"
 
-const stats = [
-  { icon: FileText, label: "Total Documents", value: "47", change: "+12%", color: "text-primary" },
-  { icon: MessageSquare, label: "AI Chats", value: "156", change: "+28%", color: "text-accent" },
-  { icon: FolderOpen, label: "Subjects", value: "8", change: "+2", color: "text-chart-3" },
-  { icon: Upload, label: "Recent Uploads", value: "5", change: "this week", color: "text-chart-4" },
-]
-
-const recentDocuments = [
-  { name: "Machine Learning Notes.pdf", subject: "Computer Science", date: "2 hours ago", pages: 24 },
-  { name: "Organic Chemistry Ch.5.pdf", subject: "Chemistry", date: "5 hours ago", pages: 18 },
-  { name: "Linear Algebra Review.pdf", subject: "Mathematics", date: "Yesterday", pages: 32 },
-  { name: "Psychology Lecture Notes.pdf", subject: "Psychology", date: "2 days ago", pages: 15 },
-]
+interface DocumentDto {
+  id: number
+  title: string
+  originalFileName: string
+  subjectName?: string | null
+  pageCount?: number | null
+  createdAt: string
+}
 
 const aiRecommendations = [
-  { icon: Brain, title: "Review Flashcards", description: "15 cards due for review in Machine Learning", action: "Start Review" },
-  { icon: Zap, title: "Quiz Available", description: "Test your knowledge on Organic Chemistry Ch.5", action: "Take Quiz" },
-  { icon: BookOpen, title: "Study Session", description: "Continue reading Linear Algebra notes", action: "Continue" },
-]
-
-const activities = [
-  { type: "upload", text: "Uploaded Machine Learning Notes", time: "2 hours ago" },
-  { type: "chat", text: "Asked AI about quantum physics", time: "4 hours ago" },
-  { type: "quiz", text: "Completed Chemistry quiz - 85%", time: "Yesterday" },
-  { type: "flashcard", text: "Created 20 flashcards for Math", time: "Yesterday" },
-  { type: "upload", text: "Uploaded Psychology Lecture Notes", time: "2 days ago" },
+  { icon: Brain, title: "Review Flashcards", description: "Flashcard generation will use your uploaded documents.", action: "Start Review" },
+  { icon: Zap, title: "Quiz Available", description: "Quizzes will appear after AI processing is connected.", action: "Take Quiz" },
+  { icon: BookOpen, title: "Study Session", description: "Upload documents to start building your study history.", action: "Continue" },
 ]
 
 const container = {
@@ -58,6 +48,27 @@ const item = {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  const firstName = user?.name?.split(" ")[0] || "Student"
+  const [recentDocuments, setRecentDocuments] = useState<DocumentDto[]>([])
+
+  useEffect(() => {
+    if (!user) return
+
+    fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((data: DocumentDto[]) => setRecentDocuments(data.slice(0, 4)))
+      .catch(() => setRecentDocuments([]))
+  }, [user])
+
+  const subjectCount = new Set(recentDocuments.map((doc) => doc.subjectName).filter(Boolean)).size
+  const stats = [
+    { icon: FileText, label: "Total Documents", value: String(recentDocuments.length), change: "real data", color: "text-primary" },
+    { icon: MessageSquare, label: "AI Chats", value: "0", change: "soon", color: "text-accent" },
+    { icon: FolderOpen, label: "Subjects", value: String(subjectCount), change: "real data", color: "text-chart-3" },
+    { icon: Upload, label: "Recent Uploads", value: String(recentDocuments.length), change: "latest", color: "text-chart-4" },
+  ]
+
   return (
     <motion.div
       variants={container}
@@ -65,11 +76,10 @@ export default function DashboardPage() {
       animate="show"
       className="space-y-6"
     >
-      {/* Welcome Section */}
       <motion.div variants={item} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            Welcome back, <span className="text-primary">Alex</span>
+            Welcome back, <span className="text-primary">{firstName}</span>
           </h1>
           <p className="text-muted-foreground mt-1">
             Ready to continue your learning journey?
@@ -85,7 +95,6 @@ export default function DashboardPage() {
         </motion.button>
       </motion.div>
 
-      {/* Stats Grid */}
       <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
           <motion.div
@@ -113,24 +122,28 @@ export default function DashboardPage() {
         ))}
       </motion.div>
 
-      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Documents */}
         <motion.div variants={item} className="lg:col-span-2">
           <div className="glass-card rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-foreground">Recent Documents</h2>
-              <motion.button
+              <motion.a
+                href="/documents"
                 className="text-sm text-primary flex items-center gap-1 hover:underline"
                 whileHover={{ x: 4 }}
               >
                 View All <ArrowRight className="w-4 h-4" />
-              </motion.button>
+              </motion.a>
             </div>
             <div className="space-y-3">
+              {recentDocuments.length === 0 && (
+                <div className="rounded-xl bg-secondary/30 p-6 text-center text-sm text-muted-foreground">
+                  No documents yet. Upload your first study file from the Documents page.
+                </div>
+              )}
               {recentDocuments.map((doc, i) => (
                 <motion.div
-                  key={doc.name}
+                  key={doc.id}
                   className="flex items-center gap-4 p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -142,15 +155,15 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                      {doc.name}
+                      {doc.title || doc.originalFileName}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.subject} • {doc.pages} pages
+                      {doc.subjectName || "Uncategorized"} {doc.pageCount ? `- ${doc.pageCount} pages` : ""}
                     </p>
                   </div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {doc.date}
+                    {new Date(doc.createdAt).toLocaleDateString()}
                   </div>
                 </motion.div>
               ))}
@@ -158,7 +171,6 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* AI Recommendations */}
         <motion.div variants={item}>
           <div className="glass-card rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -194,9 +206,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* Quick Actions & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
         <motion.div variants={item} className="lg:col-span-1">
           <div className="glass-card rounded-xl p-5">
             <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
@@ -223,26 +233,11 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Activity Timeline */}
         <motion.div variants={item} className="lg:col-span-2">
           <div className="glass-card rounded-xl p-5">
             <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
-            <div className="space-y-4">
-              {activities.map((activity, i) => (
-                <motion.div
-                  key={i}
-                  className="flex items-start gap-3"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.05 * i }}
-                >
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm text-foreground">{activity.text}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
-                  </div>
-                </motion.div>
-              ))}
+            <div className="rounded-xl bg-secondary/30 p-6 text-center text-sm text-muted-foreground">
+              Activity will appear after uploads, chats, quizzes, and flashcards are connected.
             </div>
           </div>
         </motion.div>

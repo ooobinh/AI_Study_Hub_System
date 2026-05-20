@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
+import { useAuth } from "@/components/providers/auth-provider"
 import {
   User,
   Bell,
@@ -41,12 +42,16 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
+  const { user } = useAuth()
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   const selectedTheme = mounted ? theme : "dark"
+  const nameParts = user?.name?.trim().split(/\s+/) || []
+  const firstName = nameParts[0] || ""
+  const lastName = nameParts.slice(1).join(" ")
 
   return (
     <motion.div
@@ -104,8 +109,8 @@ export default function SettingsPage() {
                   </motion.button>
                 </div>
                 <div>
-                  <p className="text-foreground font-medium">Alex Chen</p>
-                  <p className="text-sm text-muted-foreground">alex.chen@university.edu</p>
+                  <p className="text-foreground font-medium">{user?.name || "Student"}</p>
+                  <p className="text-sm text-muted-foreground">{user?.email || "No email"}</p>
                 </div>
               </div>
 
@@ -115,7 +120,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-2">First Name</label>
                   <input
                     type="text"
-                    defaultValue="Alex"
+                    value={firstName}
+                    readOnly
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
@@ -123,7 +129,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-2">Last Name</label>
                   <input
                     type="text"
-                    defaultValue="Chen"
+                    value={lastName}
+                    readOnly
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
@@ -131,7 +138,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-2">Email</label>
                   <input
                     type="email"
-                    defaultValue="alex.chen@university.edu"
+                    value={user?.email || ""}
+                    readOnly
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
@@ -139,7 +147,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-2">Bio</label>
                   <textarea
                     rows={3}
-                    defaultValue="Computer Science student passionate about AI and machine learning."
+                    value={user?.major ? `${user.major} student at ${user.university || "your university"}.` : "No bio yet."}
+                    readOnly
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all resize-none"
                   />
                 </div>

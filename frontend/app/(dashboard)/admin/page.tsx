@@ -1,7 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/providers/auth-provider"
 import {
   Users,
   FileText,
@@ -61,6 +63,23 @@ const item = {
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<"users" | "documents" | "reports">("users")
   const [searchQuery, setSearchQuery] = useState("")
+  const { user } = useAuth()
+  const router = useRouter()
+  const isAdmin = user?.roles.includes("ADMIN")
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      router.replace("/dashboard")
+    }
+  }, [isAdmin, router, user])
+
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
+        Redirecting...
+      </div>
+    )
+  }
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
