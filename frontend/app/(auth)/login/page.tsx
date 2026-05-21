@@ -5,7 +5,8 @@ import { useState } from "react"
 import { Sparkles, Mail, Lock, User, Github, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
-import { getNetworkErrorMessage } from "@/lib/api"
+import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { emailFormatMessage, isValidEmail } from "@/lib/validation"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -14,16 +15,56 @@ export default function AuthPage() {
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
   const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
+  const [emailTouched, setEmailTouched] = useState(false)
   const router = useRouter()
   const { login, register } = useAuth()
+  const emailIsInvalid = emailTouched && email.trim().length > 0 && !isValidEmail(email)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setMessage("")
+    setEmailTouched(true)
+
+    if (isForgotPassword) {
+      if (!email.trim()) {
+        setError("Please enter your email address.")
+        return
+      }
+      if (!isValidEmail(email)) {
+        setError(emailFormatMessage)
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        const response = await fetch(`${getApiUrl()}/api/auth/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.message || "Could not send reset email")
+        }
+        setMessage(body?.message || "If that email exists, a password reset link has been sent.")
+      } catch (err) {
+        setError(getNetworkErrorMessage(err))
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
 
     if (!email.trim() || !password.trim() || (!isLogin && !name.trim())) {
       setError(isLogin ? "Please enter email and password." : "Please enter your name, email, and password.")
+      return
+    }
+    if (!isValidEmail(email)) {
+      setError(emailFormatMessage)
       return
     }
 
@@ -108,7 +149,7 @@ export default function AuthPage() {
             {["Login", "Register"].map((tab, i) => (
               <motion.button
                 key={tab}
-                onClick={() => setIsLogin(i === 0)}
+                onClick={() => { setIsLogin(i === 0); setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   (i === 0 ? isLogin : !isLogin)
                     ? "bg-primary text-primary-foreground"
@@ -124,13 +165,19 @@ export default function AuthPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {isForgotPassword && (
+              <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-muted-foreground">
+                Enter your email and we will send a secure link to create a new password.
+              </div>
+            )}
+
             {/* Name Field (Register only) */}
             <motion.div
               initial={false}
               animate={{
-                height: isLogin ? 0 : "auto",
-                opacity: isLogin ? 0 : 1,
-                marginBottom: isLogin ? 0 : 16
+                height: isLogin || isForgotPassword ? 0 : "auto",
+                opacity: isLogin || isForgotPassword ? 0 : 1,
+                marginBottom: isLogin || isForgotPassword ? 0 : 16
               }}
               transition={{ duration: 0.3 }}
               className="overflow-hidden"
@@ -161,19 +208,45 @@ export default function AuthPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    if (error === emailFormatMessage) {
+                      setError("")
+                    }
+                  }}
+                  onBlur={() => setEmailTouched(true)}
                   placeholder="you@university.edu"
-                  required
-                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+                  required={!isForgotPassword}
+                  aria-invalid={emailIsInvalid}
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/50 border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
+                    emailIsInvalid
+                      ? "border-destructive/60 focus:border-destructive/60 focus:ring-destructive/20"
+                      : "border-border/50 focus:border-primary/50 focus:ring-primary/30"
+                  }`}
                 />
               </div>
+              {emailIsInvalid && (
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                >
+                  {emailFormatMessage}
+                </motion.p>
+              )}
             </motion.div>
 
             {/* Password */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
+              animate={{
+                opacity: isForgotPassword ? 0 : 1,
+                x: isForgotPassword ? -20 : 0,
+                height: isForgotPassword ? 0 : "auto",
+                marginBottom: isForgotPassword ? 0 : 16
+              }}
               transition={{ delay: 0.3 }}
+              className="overflow-hidden"
             >
               <label className="block text-sm font-medium text-foreground mb-2">Password</label>
               <div className="relative group">
@@ -198,17 +271,31 @@ export default function AuthPage() {
             </motion.div>
 
             {/* Forgot Password */}
-            {isLogin && (
+            {isLogin && !isForgotPassword && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
                 className="text-right"
               >
-                <button type="button" className="text-sm text-primary hover:underline">
+                <button
+                  type="button"
+                  onClick={() => { setIsForgotPassword(true); setError(""); setMessage(""); setEmailTouched(false) }}
+                  className="text-sm text-primary hover:underline"
+                >
                   Forgot password?
                 </button>
               </motion.div>
+            )}
+
+            {isForgotPassword && (
+              <button
+                type="button"
+                onClick={() => { setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Back to sign in
+              </button>
             )}
 
             {error && (
@@ -218,6 +305,16 @@ export default function AuthPage() {
                 className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
               >
                 {error}
+              </motion.p>
+            )}
+
+            {message && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary"
+              >
+                {message}
               </motion.p>
             )}
 
@@ -232,7 +329,7 @@ export default function AuthPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              {isSubmitting ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
+              {isSubmitting ? "Please wait..." : isForgotPassword ? "Send Reset Link" : isLogin ? "Sign In" : "Create Account"}
               <ArrowRight className="w-4 h-4" />
             </motion.button>
           </form>

@@ -4,6 +4,7 @@ import com.aistudyhub.common.ApiException;
 import com.aistudyhub.dto.document.CreateDocumentRequest;
 import com.aistudyhub.dto.document.DocumentDto;
 import com.aistudyhub.dto.document.StorageStatusDto;
+import com.aistudyhub.service.DocumentAiService;
 import com.aistudyhub.service.DocumentService;
 import com.aistudyhub.service.SupabaseStorageService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,15 +26,18 @@ import java.util.UUID;
 @RequestMapping("/api/uploads")
 public class UploadController {
     private final DocumentService documentService;
+    private final DocumentAiService documentAiService;
     private final SupabaseStorageService supabaseStorageService;
     private final Path uploadDir;
 
     public UploadController(
             DocumentService documentService,
+            DocumentAiService documentAiService,
             SupabaseStorageService supabaseStorageService,
             @Value("${app.upload.dir}") String uploadDir
     ) {
         this.documentService = documentService;
+        this.documentAiService = documentAiService;
         this.supabaseStorageService = supabaseStorageService;
         this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
@@ -62,10 +66,17 @@ public class UploadController {
         String title = originalName.contains(".")
                 ? originalName.substring(0, originalName.lastIndexOf('.'))
                 : originalName;
+        byte[] fileBytes;
+
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not read uploaded file");
+        }
 
         if (supabaseStorageService.isConfigured()) {
             SupabaseStorageService.StoredFile storedFile = supabaseStorageService.uploadDocument(ownerId, file);
-            return documentService.create(new CreateDocumentRequest(
+            DocumentDto document = documentService.create(new CreateDocumentRequest(
                     ownerId,
                     null,
                     null,
@@ -79,6 +90,7 @@ public class UploadController {
                     null,
                     "PRIVATE"
             ));
+            return documentAiService.processUploadedDocument(document, fileBytes);
         }
 
         String safeName = originalName.replaceAll("[^a-zA-Z0-9._() -]", "_");
@@ -100,7 +112,7 @@ public class UploadController {
         String baseUrl = request.getRequestURL().toString().replace(request.getRequestURI(), "");
         String fileUrl = baseUrl + "/uploads/documents/" + ownerId + "/" + storedName;
 
-        return documentService.create(new CreateDocumentRequest(
+        DocumentDto document = documentService.create(new CreateDocumentRequest(
                 ownerId,
                 null,
                 null,
@@ -114,5 +126,6 @@ public class UploadController {
                 null,
                 "PRIVATE"
         ));
+        return documentAiService.processUploadedDocument(document, fileBytes);
     }
 }

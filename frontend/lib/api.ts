@@ -13,8 +13,8 @@ export function getApiUrl() {
 
 export function getNetworkErrorMessage(error: unknown) {
   if (error instanceof TypeError) {
-    return "Không kết nối được backend. Hãy chạy backend ở port 8080 rồi thử lại."
+    return "Could not connect to the backend. Start the backend on port 8080 and try again."
   }
 
-  return error instanceof Error ? error.message : "Có lỗi kết nối backend"
+  return error instanceof Error ? error.message : "Backend connection failed"
 }

@@ -19,6 +19,8 @@ import {
   Copy,
   Check
 } from "lucide-react"
+import { useAuth } from "@/components/providers/auth-provider"
+import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface Message {
   id: string
@@ -34,13 +36,27 @@ interface Chat {
   date: string
 }
 
-const chatHistory: Chat[] = [
-  { id: "1", title: "Machine Learning Basics", lastMessage: "Can you explain gradient descent?", date: "Today" },
-  { id: "2", title: "Chemistry Questions", lastMessage: "What is covalent bonding?", date: "Today" },
-  { id: "3", title: "Math Homework Help", lastMessage: "How do I solve integrals?", date: "Yesterday" },
-  { id: "4", title: "Physics Concepts", lastMessage: "Explain Newton's laws", date: "Yesterday" },
-  { id: "5", title: "Essay Writing", lastMessage: "Help me structure my essay", date: "2 days ago" },
-]
+interface ChatMessageDto {
+  id: number
+  sessionId: number
+  sender: "USER" | "AI"
+  messageText: string
+  createdAt: string
+}
+
+interface ChatSessionDto {
+  id: number
+  documentId?: number | null
+  sessionTitle: string
+  lastMessage?: string | null
+  updatedAt: string
+}
+
+interface DocumentOption {
+  id: number
+  title: string
+  originalFileName: string
+}
 
 const suggestedPrompts = [
   { icon: Brain, text: "Summarize my Machine Learning notes", color: "text-primary" },
@@ -59,10 +75,15 @@ const initialMessages: Message[] = [
 ]
 
 export default function ChatPage() {
+  const { user } = useAuth()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
-  const [selectedChat, setSelectedChat] = useState("1")
+  const [selectedChat, setSelectedChat] = useState<string | null>(null)
+  const [selectedDocumentId, setSelectedDocumentId] = useState("")
+  const [chatHistory, setChatHistory] = useState<Chat[]>([])
+  const [documents, setDocuments] = useState<DocumentOption[]>([])
+  const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -73,6 +94,67 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  useEffect(() => {
+    if (!user) return
+
+    fetch(`${getApiUrl()}/api/chat/sessions?userId=${user.id}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((sessions: ChatSessionDto[]) => {
+        setChatHistory(sessions.map((session) => ({
+          id: String(session.id),
+          title: session.sessionTitle,
+          lastMessage: session.lastMessage || "No messages yet",
+          date: "Recent",
+        })))
+      })
+      .catch(() => setChatHistory([]))
+
+    fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((data: DocumentOption[]) => setDocuments(data))
+      .catch(() => setDocuments([]))
+  }, [user])
+
+  const loadMessages = async (sessionId: string) => {
+    const response = await fetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/messages`)
+    if (!response.ok) return
+    const data = await response.json() as ChatMessageDto[]
+    setMessages([
+      ...initialMessages,
+      ...data.map((message) => ({
+        id: String(message.id),
+        role: message.sender === "AI" ? "assistant" as const : "user" as const,
+        content: message.messageText,
+        timestamp: new Date(message.createdAt),
+      }))
+    ])
+  }
+
+  const ensureSession = async (firstMessage: string) => {
+    if (selectedChat) return selectedChat
+    if (!user) throw new Error("Please log in first.")
+
+    const response = await fetch(`${getApiUrl()}/api/chat/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        documentId: selectedDocumentId ? Number(selectedDocumentId) : null,
+        sessionTitle: firstMessage.slice(0, 60) || "New Study Chat",
+      }),
+    })
+    if (!response.ok) throw new Error("Could not create chat session")
+    const session = await response.json() as ChatSessionDto
+    setSelectedChat(String(session.id))
+    setChatHistory(prev => [{
+      id: String(session.id),
+      title: session.sessionTitle,
+      lastMessage: firstMessage,
+      date: "Recent",
+    }, ...prev])
+    return String(session.id)
+  }
 
   const handleSend = async () => {
     if (!input.trim()) return
@@ -85,35 +167,36 @@ export default function ChatPage() {
     }
 
     setMessages(prev => [...prev, userMessage])
+    const question = input
     setInput("")
+    setError("")
     setIsTyping(true)
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponses: Record<string, string> = {
-        "summarize": "Based on your Machine Learning notes, here are the key concepts:\n\n**1. Supervised Learning**\nLearning from labeled data to make predictions.\n\n**2. Unsupervised Learning**\nFinding patterns in unlabeled data.\n\n**3. Gradient Descent**\nAn optimization algorithm used to minimize the cost function.\n\n**4. Neural Networks**\nComputing systems inspired by biological neural networks.\n\nWould you like me to explain any of these in more detail?",
-        "flashcard": "I've created 10 flashcards from your Chemistry Ch.5 notes:\n\n**Card 1:**\nQ: What is a covalent bond?\nA: A chemical bond where electrons are shared between atoms.\n\n**Card 2:**\nQ: What is electronegativity?\nA: The tendency of an atom to attract electrons.\n\n**Card 3:**\nQ: Define polar molecules.\nA: Molecules with unequal electron distribution.\n\nWould you like me to create more flashcards or start a study session?",
-        "quiz": "Here's a quick quiz on Linear Algebra:\n\n**Question 1:**\nWhat is the determinant of a 2x2 identity matrix?\na) 0  b) 1  c) 2  d) -1\n\n**Question 2:**\nWhat does it mean if two vectors are orthogonal?\na) They are parallel  b) They are perpendicular  c) They have the same magnitude  d) They are collinear\n\n**Question 3:**\nWhat is the rank of a matrix?\n\nReply with your answers and I'll check them!",
-        "default": "That's a great question! Let me help you understand this concept.\n\nBased on your uploaded documents, I can see this topic is covered in your notes. The key points to understand are:\n\n1. **Foundation**: Start with the basic principles\n2. **Application**: See how it applies in real scenarios\n3. **Practice**: Work through examples to solidify understanding\n\nWould you like me to go deeper into any specific aspect, or shall I create some practice questions for you?"
+    try {
+      const sessionId = await ensureSession(question)
+      const response = await fetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageText: question }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message || "AI request failed")
       }
-
-      let response = aiResponses.default
-      const lowerInput = input.toLowerCase()
-      
-      if (lowerInput.includes("summarize")) response = aiResponses.summarize
-      else if (lowerInput.includes("flashcard")) response = aiResponses.flashcard
-      else if (lowerInput.includes("quiz")) response = aiResponses.quiz
-
+      const data = await response.json() as ChatMessageDto
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: String(data.id),
         role: "assistant",
-        content: response,
-        timestamp: new Date()
+        content: data.messageText,
+        timestamp: new Date(data.createdAt)
       }
-
       setMessages(prev => [...prev, aiMessage])
+      setChatHistory(prev => prev.map(chat => chat.id === sessionId ? { ...chat, lastMessage: data.messageText } : chat))
+    } catch (err) {
+      setError(getNetworkErrorMessage(err))
+    } finally {
       setIsTyping(false)
-    }, 1500)
+    }
   }
 
   const copyMessage = (id: string, content: string) => {
@@ -133,6 +216,7 @@ export default function ChatPage() {
         {/* New Chat Button */}
         <div className="p-3 border-b border-border/50">
           <motion.button
+            onClick={() => { setSelectedChat(null); setMessages(initialMessages); setError("") }}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-all"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -147,7 +231,7 @@ export default function ChatPage() {
           {chatHistory.map((chat) => (
             <motion.button
               key={chat.id}
-              onClick={() => setSelectedChat(chat.id)}
+              onClick={() => { setSelectedChat(chat.id); loadMessages(chat.id) }}
               className={`w-full text-left p-3 rounded-xl transition-all ${
                 selectedChat === chat.id
                   ? "bg-primary/15 border border-primary/20"
@@ -308,6 +392,30 @@ export default function ChatPage() {
 
         {/* Input Area */}
         <div className="p-4 border-t border-border/50">
+          {error && (
+            <div className="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileText className="h-4 w-4" />
+              Document context
+            </div>
+            <select
+              value={selectedDocumentId}
+              onChange={(event) => setSelectedDocumentId(event.target.value)}
+              disabled={!!selectedChat}
+              className="min-w-0 flex-1 rounded-xl border border-border/50 bg-secondary/50 px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="">General AI chat</option>
+              {documents.map((document) => (
+                <option key={document.id} value={document.id}>
+                  {document.title || document.originalFileName}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-end gap-3">
             <motion.button
               className="p-2.5 rounded-xl bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"

@@ -2,9 +2,13 @@ package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
 import com.aistudyhub.dto.auth.AuthResponse;
+import com.aistudyhub.dto.auth.ForgotPasswordRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
+import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
+import com.aistudyhub.dto.auth.ResetPasswordRequest;
 import com.aistudyhub.dto.auth.UserDto;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -15,10 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AuthService {
     private final JdbcTemplate jdbcTemplate;
+    private final ResendEmailService resendEmailService;
+    private final String frontendUrl;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private final RowMapper<UserDto> userMapper = new RowMapper<>() {
@@ -39,8 +46,14 @@ public class AuthService {
         }
     };
 
-    public AuthService(JdbcTemplate jdbcTemplate) {
+    public AuthService(
+            JdbcTemplate jdbcTemplate,
+            ResendEmailService resendEmailService,
+            @Value("${app.frontend.url}") String frontendUrl
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.resendEmailService = resendEmailService;
+        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
     @Transactional
@@ -77,6 +90,67 @@ public class AuthService {
         return new AuthResponse(createDevelopmentToken(user.id()), user);
     }
 
+    @Transactional
+    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
+        return forgotPassword(request, null);
+    }
+
+    @Transactional
+    public MessageResponse forgotPassword(ForgotPasswordRequest request, String requestFrontendUrl) {
+        UserDto user = findByEmailOrNull(request.email());
+        if (user == null) {
+            return new MessageResponse("If that email exists, a password reset link has been sent.");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE password_reset_tokens
+                SET used = 1
+                WHERE user_id = ? AND used = 0
+                """, user.id());
+
+        String token = UUID.randomUUID().toString() + UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO password_reset_tokens (user_id, token, expired_at, used)
+                VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                """, user.id(), token);
+
+        String resetUrl = resetBaseUrl(requestFrontendUrl) + "/reset-password?token=" + token;
+        try {
+            resendEmailService.sendPasswordResetEmail(user.email(), user.fullName(), resetUrl);
+        } catch (ApiException exception) {
+            return new MessageResponse("Reset link was created, but email could not be sent: " + exception.getMessage());
+        }
+        return new MessageResponse("If that email exists, a password reset link has been sent.");
+    }
+
+    @Transactional
+    public MessageResponse resetPassword(ResetPasswordRequest request) {
+        Long userId = jdbcTemplate.query("""
+                SELECT user_id
+                FROM password_reset_tokens
+                WHERE token = ?
+                  AND used = 0
+                  AND expired_at > SYSDATETIME()
+                """, rs -> rs.next() ? rs.getLong("user_id") : null, request.token());
+
+        if (userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Reset link is invalid or expired");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET password_hash = ?, updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, passwordEncoder.encode(request.newPassword()), userId);
+        jdbcTemplate.update("""
+                UPDATE password_reset_tokens
+                SET used = 1
+                WHERE token = ?
+                """, request.token());
+
+        return new MessageResponse("Password has been reset. You can sign in now.");
+    }
+
     public UserDto findById(Long id) {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
@@ -101,6 +175,14 @@ public class AuthService {
                 WHERE email = ?
                 """, userMapper, email).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
+    private UserDto findByEmailOrNull(String email) {
+        return jdbcTemplate.query("""
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                FROM users
+                WHERE email = ? AND status = 'ACTIVE'
+                """, userMapper, email).stream().findFirst().orElse(null);
     }
 
     private boolean emailExists(String email) {
@@ -138,5 +220,12 @@ public class AuthService {
 
     private String createDevelopmentToken(Long userId) {
         return "dev-token-" + userId;
+    }
+
+    private String resetBaseUrl(String requestFrontendUrl) {
+        String value = requestFrontendUrl == null || requestFrontendUrl.isBlank()
+                ? frontendUrl
+                : requestFrontendUrl;
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 }

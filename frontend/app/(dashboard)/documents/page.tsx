@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useCallback, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
 import {
   Upload,
@@ -103,6 +104,7 @@ function formatDate(value: string) {
 
 export default function DocumentsPage() {
   const { user } = useAuth()
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [selectedSubject, setSelectedSubject] = useState("All")
   const [searchQuery, setSearchQuery] = useState("")
@@ -144,6 +146,7 @@ export default function DocumentsPage() {
 
     setError("")
     setUploadMessage("")
+    const uploadedDocs: DocumentDto[] = []
 
     for (const file of acceptedFiles) {
       try {
@@ -151,16 +154,26 @@ export default function DocumentsPage() {
         setUploadMessage(`Uploading ${file.name}...`)
 
         setUploadProgress(20)
-        await uploadFileToBackend(file, user.id)
+        const uploadedDoc = await uploadFileToBackend(file, user.id)
+        uploadedDocs.push(uploadedDoc)
+        setDocuments(prev => [uploadedDoc, ...prev.filter(doc => doc.id !== uploadedDoc.id)])
         setUploadProgress(95)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Upload failed")
+        setError(getNetworkErrorMessage(err))
         break
       }
     }
 
+    if (uploadedDocs.length === 0) {
+      setUploadProgress(null)
+      setUploadMessage("")
+      return
+    }
+
+    setSelectedSubject("All")
+    setSearchQuery("")
     setUploadProgress(100)
-    setUploadMessage("Upload complete")
+    setUploadMessage(uploadedDocs.length === 1 ? "Upload complete" : `${uploadedDocs.length} files uploaded`)
     await loadDocuments()
     setTimeout(() => {
       setUploadProgress(null)
@@ -204,8 +217,7 @@ export default function DocumentsPage() {
   }
 
   const viewDocument = async (doc: DocumentDto) => {
-    const userParam = user ? `?userId=${user.id}` : ""
-    window.open(`${getApiUrl()}/api/documents/${doc.id}/file${userParam}`, "_blank")
+    router.push(`/documents/${doc.id}/view`)
   }
 
   const downloadDocument = async (doc: DocumentDto) => {
@@ -443,6 +455,7 @@ export default function DocumentsPage() {
               key={doc.id}
               variants={item}
               layout
+              onClick={() => viewDocument(doc)}
               className={`glass-card rounded-xl overflow-hidden hover:border-primary/30 transition-all cursor-pointer group ${
                 viewMode === "list" ? "p-4" : "p-4"
               }`}
@@ -454,7 +467,7 @@ export default function DocumentsPage() {
                     <FileText className="w-12 h-12 text-muted-foreground/50" />
                     <motion.div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3 gap-2">
                       <motion.button
-                        onClick={() => viewDocument(doc)}
+                        onClick={(event) => { event.stopPropagation(); viewDocument(doc) }}
                         className="p-2 rounded-lg bg-secondary/80 text-foreground"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -462,7 +475,7 @@ export default function DocumentsPage() {
                         <Eye className="w-4 h-4" />
                       </motion.button>
                       <motion.button
-                        onClick={() => downloadDocument(doc)}
+                        onClick={(event) => { event.stopPropagation(); downloadDocument(doc) }}
                         className="p-2 rounded-lg bg-secondary/80 text-foreground"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -470,7 +483,7 @@ export default function DocumentsPage() {
                         <Download className="w-4 h-4" />
                       </motion.button>
                       <motion.button
-                        onClick={() => shareDocument(doc)}
+                        onClick={(event) => { event.stopPropagation(); shareDocument(doc) }}
                         className="p-2 rounded-lg bg-secondary/80 text-foreground"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -521,7 +534,7 @@ export default function DocumentsPage() {
                       <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
                     <motion.button
                       onClick={() => toggleFavorite(doc.id)}
                       whileHover={{ scale: 1.2 }}

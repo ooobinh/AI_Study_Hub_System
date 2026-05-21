@@ -13,7 +13,7 @@ public record CreateDocumentRequest(
         @NotBlank @Size(max = 255) String originalFileName,
         @NotBlank String fileUrl,
         String previewUrl,
-        @Size(max = 50) String fileType,
+        @Size(max = 255) String fileType,
         Long fileSize,
         Integer pageCount,
         String visibility

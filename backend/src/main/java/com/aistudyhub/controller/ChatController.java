@@ -54,4 +54,10 @@ public class ChatController {
     public ChatMessageDto addAiMessage(@PathVariable Long sessionId, @Valid @RequestBody SendMessageRequest request) {
         return chatService.addAiMessage(sessionId, request);
     }
+
+    @PostMapping("/sessions/{sessionId}/ask")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChatMessageDto askAi(@PathVariable Long sessionId, @Valid @RequestBody SendMessageRequest request) {
+        return chatService.askAi(sessionId, request);
+    }
 }

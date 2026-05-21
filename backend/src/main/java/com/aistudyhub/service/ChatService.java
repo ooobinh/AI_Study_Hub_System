@@ -18,6 +18,8 @@ import java.util.List;
 @Service
 public class ChatService {
     private final JdbcTemplate jdbcTemplate;
+    private final GeminiService geminiService;
+    private final DocumentAiService documentAiService;
 
     private final RowMapper<ChatSessionDto> sessionMapper = new RowMapper<>() {
         @Override
@@ -44,8 +46,10 @@ public class ChatService {
             rs.getTimestamp("created_at").toLocalDateTime()
     );
 
-    public ChatService(JdbcTemplate jdbcTemplate) {
+    public ChatService(JdbcTemplate jdbcTemplate, GeminiService geminiService, DocumentAiService documentAiService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.geminiService = geminiService;
+        this.documentAiService = documentAiService;
     }
 
     public List<ChatSessionDto> listSessions(Long userId) {
@@ -132,6 +136,28 @@ public class ChatService {
         return latestMessage(sessionId);
     }
 
+    @Transactional
+    public ChatMessageDto askAi(Long sessionId, SendMessageRequest request) {
+        ChatSessionDto session = findSession(sessionId);
+        sendUserMessage(sessionId, request);
+
+        String answer;
+        String model = geminiService.model();
+        try {
+            String context = documentAiService.documentContext(session.documentId());
+            answer = geminiService.answerQuestion(request.messageText(), context, recentMessages(sessionId));
+        } catch (ApiException exception) {
+            answer = "Gemini is not configured yet. Add GEMINI_API_KEY to backend/.env, restart the backend, then ask again.";
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO chat_messages (session_id, sender, message_text, ai_model)
+                VALUES (?, 'AI', ?, ?)
+                """, sessionId, answer, model);
+        touchSession(sessionId);
+        return latestMessage(sessionId);
+    }
+
     private ChatMessageDto latestMessage(Long sessionId) {
         return jdbcTemplate.query("""
                 SELECT TOP 1 message_id, session_id, sender, message_text, ai_model, created_at
@@ -144,5 +170,14 @@ public class ChatService {
 
     private void touchSession(Long sessionId) {
         jdbcTemplate.update("UPDATE chat_sessions SET updated_at = SYSDATETIME() WHERE session_id = ?", sessionId);
+    }
+
+    private List<String> recentMessages(Long sessionId) {
+        return jdbcTemplate.queryForList("""
+                SELECT TOP 10 CONCAT(sender, ': ', message_text)
+                FROM chat_messages
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                """, String.class, sessionId);
     }
 }
