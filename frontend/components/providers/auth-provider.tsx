@@ -20,6 +20,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithGoogleCredential: (credential: string) => Promise<void>
   register: (fullName: string, email: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -102,6 +103,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('aiStudyHubToken', data.token)
   }
 
+  const loginWithGoogleCredential = async (credential: string) => {
+    const data = await requestAuth('/api/auth/google', { credential })
+    const newUser = mapUser(data.user)
+
+    setUser(newUser)
+    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
+    localStorage.setItem('aiStudyHubToken', data.token)
+  }
+
   const register = async (fullName: string, email: string, password: string) => {
     const data = await requestAuth('/api/auth/register', { fullName, email, password })
     const newUser = mapUser(data.user)
@@ -118,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, register, logout }}>
       {children}
     </AuthContext.Provider>
   )

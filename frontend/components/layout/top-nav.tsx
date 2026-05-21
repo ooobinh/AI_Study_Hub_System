@@ -6,6 +6,7 @@ import { Search, Bell, User, Command } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LanguageSwitcher } from "@/components/layout/language-switcher"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,7 @@ import {
 
 export function TopNav() {
   const { user, logout } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
 
   const handleLogout = () => {
@@ -40,7 +42,7 @@ export function TopNav() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <input
             type="text"
-            placeholder="Search documents, chats..."
+            placeholder={t("searchGlobal")}
             className="w-full pl-10 pr-16 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/50">
@@ -75,29 +77,29 @@ export function TopNav() {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium text-foreground">{user?.name || "Student"}</span>
-                <span className="text-xs text-muted-foreground">{user?.email || "Signed in"}</span>
+                <span className="text-sm font-medium text-foreground">{user?.name || t("student")}</span>
+                <span className="text-xs text-muted-foreground">{user?.email || t("signedIn")}</span>
               </div>
             </motion.button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 glass-card border-border/50">
-            <DropdownMenuLabel className="text-foreground">My Account</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-foreground">{t("myAccount")}</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border/50" />
             <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
-              Profile
+              {t("profile")}
             </DropdownMenuItem>
             <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
-              Settings
+              {t("settings")}
             </DropdownMenuItem>
             <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
-              Billing
+              {t("billing")}
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border/50" />
             <DropdownMenuItem
               onClick={handleLogout}
               className="text-destructive focus:text-destructive cursor-pointer"
             >
-              Log out
+              {t("logOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

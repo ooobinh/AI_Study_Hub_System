@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import {
   Send,
   Sparkles,
@@ -20,6 +20,7 @@ import {
   Check
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface Message {
@@ -58,24 +59,23 @@ interface DocumentOption {
   originalFileName: string
 }
 
-const suggestedPrompts = [
-  { icon: Brain, text: "Summarize my Machine Learning notes", color: "text-primary" },
-  { icon: Lightbulb, text: "Create flashcards for Chemistry Ch.5", color: "text-accent" },
-  { icon: BookOpen, text: "Generate a quiz on Linear Algebra", color: "text-chart-3" },
-  { icon: FileText, text: "Explain key concepts from my notes", color: "text-chart-4" },
-]
-
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: "Hello! I'm your AI study assistant. I can help you understand your documents, create flashcards, generate quizzes, and answer questions about your study materials. What would you like to learn today?",
-    timestamp: new Date()
-  }
-]
-
 export default function ChatPage() {
   const { user } = useAuth()
+  const { t } = useLanguage()
+  const initialMessages = useMemo<Message[]>(() => [
+    {
+      id: "1",
+      role: "assistant",
+      content: t("aiIntro"),
+      timestamp: new Date()
+    }
+  ], [t])
+  const suggestedPrompts = [
+    { icon: Brain, text: t("promptSummarize"), color: "text-primary" },
+    { icon: Lightbulb, text: t("promptFlashcards"), color: "text-accent" },
+    { icon: BookOpen, text: t("promptQuiz"), color: "text-chart-3" },
+    { icon: FileText, text: t("promptConcepts"), color: "text-chart-4" },
+  ]
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -96,6 +96,12 @@ export default function ChatPage() {
   }, [messages])
 
   useEffect(() => {
+    if (!selectedChat && messages.length === 1 && messages[0]?.id === "1") {
+      setMessages(initialMessages)
+    }
+  }, [initialMessages, messages, selectedChat])
+
+  useEffect(() => {
     if (!user) return
 
     fetch(`${getApiUrl()}/api/chat/sessions?userId=${user.id}`)
@@ -104,8 +110,8 @@ export default function ChatPage() {
         setChatHistory(sessions.map((session) => ({
           id: String(session.id),
           title: session.sessionTitle,
-          lastMessage: session.lastMessage || "No messages yet",
-          date: "Recent",
+          lastMessage: session.lastMessage || t("noMessagesYet"),
+          date: t("recent"),
         })))
       })
       .catch(() => setChatHistory([]))
@@ -133,7 +139,7 @@ export default function ChatPage() {
 
   const ensureSession = async (firstMessage: string) => {
     if (selectedChat) return selectedChat
-    if (!user) throw new Error("Please log in first.")
+    if (!user) throw new Error(t("loginFirst"))
 
     const response = await fetch(`${getApiUrl()}/api/chat/sessions`, {
       method: "POST",
@@ -141,17 +147,17 @@ export default function ChatPage() {
       body: JSON.stringify({
         userId: user.id,
         documentId: selectedDocumentId ? Number(selectedDocumentId) : null,
-        sessionTitle: firstMessage.slice(0, 60) || "New Study Chat",
+        sessionTitle: firstMessage.slice(0, 60) || t("newStudyChat"),
       }),
     })
-    if (!response.ok) throw new Error("Could not create chat session")
+    if (!response.ok) throw new Error(t("createChatFailed"))
     const session = await response.json() as ChatSessionDto
     setSelectedChat(String(session.id))
     setChatHistory(prev => [{
       id: String(session.id),
       title: session.sessionTitle,
       lastMessage: firstMessage,
-      date: "Recent",
+      date: t("recent"),
     }, ...prev])
     return String(session.id)
   }
@@ -181,7 +187,7 @@ export default function ChatPage() {
       })
       if (!response.ok) {
         const body = await response.json().catch(() => null)
-        throw new Error(body?.message || "AI request failed")
+        throw new Error(body?.message || t("aiRequestFailed"))
       }
       const data = await response.json() as ChatMessageDto
       const aiMessage: Message = {
@@ -222,7 +228,7 @@ export default function ChatPage() {
             whileTap={{ scale: 0.98 }}
           >
             <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">New Chat</span>
+            <span className="text-sm font-medium">{t("newChat")}</span>
           </motion.button>
         </div>
 
@@ -367,7 +373,7 @@ export default function ChatPage() {
             animate={{ opacity: 1, y: 0 }}
             className="px-4 pb-4"
           >
-            <p className="text-sm text-muted-foreground mb-3">Suggested prompts:</p>
+            <p className="text-sm text-muted-foreground mb-3">{t("suggestedPrompts")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {suggestedPrompts.map((prompt, i) => (
                 <motion.button
@@ -400,7 +406,7 @@ export default function ChatPage() {
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <FileText className="h-4 w-4" />
-              Document context
+              {t("documentContext")}
             </div>
             <select
               value={selectedDocumentId}
@@ -408,7 +414,7 @@ export default function ChatPage() {
               disabled={!!selectedChat}
               className="min-w-0 flex-1 rounded-xl border border-border/50 bg-secondary/50 px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="">General AI chat</option>
+              <option value="">{t("generalAiChat")}</option>
               {documents.map((document) => (
                 <option key={document.id} value={document.id}>
                   {document.title || document.originalFileName}
@@ -434,7 +440,7 @@ export default function ChatPage() {
                     handleSend()
                   }
                 }}
-                placeholder="Ask anything about your documents..."
+                placeholder={t("chatPlaceholder")}
                 rows={1}
                 className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all resize-none"
                 style={{ minHeight: "48px", maxHeight: "200px" }}
@@ -455,7 +461,7 @@ export default function ChatPage() {
             </motion.button>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-3">
-            AI Study Hub can make mistakes. Consider checking important information.
+            {t("aiDisclaimer")}
           </p>
         </div>
       </div>

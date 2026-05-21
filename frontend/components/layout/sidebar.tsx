@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSidebar } from "@/components/providers/sidebar-provider"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -22,18 +23,19 @@ import {
 } from "lucide-react"
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: FileText, label: "Documents", href: "/documents" },
-  { icon: MessageSquare, label: "AI Chat", href: "/chat" },
-  { icon: BarChart3, label: "Analytics", href: "/analytics" },
-  { icon: User, label: "Profile", href: "/profile" },
-  { icon: Shield, label: "Admin", href: "/admin", adminOnly: true },
-  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: LayoutDashboard, labelKey: "dashboard", href: "/dashboard" },
+  { icon: FileText, labelKey: "documents", href: "/documents" },
+  { icon: MessageSquare, labelKey: "chat", href: "/chat" },
+  { icon: BarChart3, labelKey: "analytics", href: "/analytics" },
+  { icon: User, labelKey: "profile", href: "/profile" },
+  { icon: Shield, labelKey: "admin", href: "/admin", adminOnly: true },
+  { icon: Settings, labelKey: "settings", href: "/settings" },
 ]
 
 export function Sidebar() {
   const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const pathname = usePathname()
   const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.roles.includes("ADMIN"))
 
@@ -63,7 +65,7 @@ export function Sidebar() {
               className="flex flex-col"
             >
               <span className="font-semibold text-foreground">AI Study Hub</span>
-              <span className="text-xs text-muted-foreground">Smart Learning</span>
+              <span className="text-xs text-muted-foreground">{t("smartLearning")}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -100,7 +102,7 @@ export function Sidebar() {
                         isActive ? "text-primary" : "text-muted-foreground"
                       )}
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -121,17 +123,17 @@ export function Sidebar() {
           >
             <div className="flex items-center gap-2 mb-2">
               <BookOpen className="w-4 h-4 text-accent" />
-              <span className="text-sm font-medium text-foreground">Upgrade to Pro</span>
+              <span className="text-sm font-medium text-foreground">{t("upgrade")}</span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Unlock unlimited AI chats and advanced analytics
+              {t("unlockFeatures")}
             </p>
             <motion.button
               className="w-full py-2 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              Upgrade Now
+              {t("upgradeNow")}
             </motion.button>
           </motion.div>
         )}

@@ -22,6 +22,7 @@ import {
   Check
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   DropdownMenu,
@@ -82,8 +83,8 @@ const item = {
   show: { opacity: 1, y: 0 }
 }
 
-function formatFileSize(bytes?: number | null) {
-  if (!bytes) return "Unknown size"
+function formatFileSize(bytes: number | null | undefined, unknownSize: string) {
+  if (!bytes) return unknownSize
   const units = ["B", "KB", "MB", "GB"]
   let size = bytes
   let unit = 0
@@ -94,8 +95,8 @@ function formatFileSize(bytes?: number | null) {
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
+function formatDate(value: string, language: "en" | "vi") {
+  return new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -104,6 +105,7 @@ function formatDate(value: string) {
 
 export default function DocumentsPage() {
   const { user } = useAuth()
+  const { language, t } = useLanguage()
   const router = useRouter()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [selectedSubject, setSelectedSubject] = useState("All")
@@ -126,7 +128,7 @@ export default function DocumentsPage() {
     try {
       const response = await fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
       if (!response.ok) {
-        throw new Error("Could not load documents")
+        throw new Error(t("couldNotLoadDocuments"))
       }
       const data = await response.json() as DocumentDto[]
       setDocuments(data)
@@ -135,7 +137,7 @@ export default function DocumentsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [user])
+  }, [t, user])
 
   useEffect(() => {
     loadDocuments()
@@ -151,7 +153,7 @@ export default function DocumentsPage() {
     for (const file of acceptedFiles) {
       try {
         setUploadProgress(0)
-        setUploadMessage(`Uploading ${file.name}...`)
+        setUploadMessage(`${t("uploading")} ${file.name}...`)
 
         setUploadProgress(20)
         const uploadedDoc = await uploadFileToBackend(file, user.id)
@@ -173,13 +175,13 @@ export default function DocumentsPage() {
     setSelectedSubject("All")
     setSearchQuery("")
     setUploadProgress(100)
-    setUploadMessage(uploadedDocs.length === 1 ? "Upload complete" : `${uploadedDocs.length} files uploaded`)
+    setUploadMessage(uploadedDocs.length === 1 ? t("uploadCompleteShort") : `${uploadedDocs.length} ${t("filesUploaded")}`)
     await loadDocuments()
     setTimeout(() => {
       setUploadProgress(null)
       setUploadMessage("")
     }, 1200)
-  }, [loadDocuments, user])
+  }, [loadDocuments, t, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -193,12 +195,12 @@ export default function DocumentsPage() {
   })
 
   const subjects = useMemo(() => {
-    const names = documents.map((doc) => doc.subjectName || "Uncategorized")
+    const names = documents.map((doc) => doc.subjectName || t("uncategorized"))
     return ["All", ...Array.from(new Set(names))]
-  }, [documents])
+  }, [documents, t])
 
   const filteredDocuments = documents.filter(doc => {
-    const subject = doc.subjectName || "Uncategorized"
+    const subject = doc.subjectName || t("uncategorized")
     const matchesSubject = selectedSubject === "All" || subject === selectedSubject
     const haystack = `${doc.title} ${doc.originalFileName} ${subject}`.toLowerCase()
     const matchesSearch = haystack.includes(searchQuery.toLowerCase())
@@ -212,7 +214,7 @@ export default function DocumentsPage() {
     const response = await fetch(`${getApiUrl()}/api/documents/${id}/favorite?userId=${user.id}`, { method: "POST" })
     if (!response.ok) {
       setDocuments(prev => prev.map(doc => doc.id === id ? { ...doc, favorite: !doc.favorite } : doc))
-      setError("Could not update favorite")
+      setError(t("couldNotUpdateFavorite"))
     }
   }
 
@@ -229,7 +231,7 @@ export default function DocumentsPage() {
   const deleteDocument = async (id: number) => {
     const response = await fetch(`${getApiUrl()}/api/documents/${id}`, { method: "DELETE" })
     if (!response.ok) {
-      setError("Could not delete document")
+      setError(t("couldNotDeleteDocument"))
       return
     }
     setDocuments(prev => prev.filter(doc => doc.id !== id))
@@ -241,13 +243,13 @@ export default function DocumentsPage() {
       method: "POST",
     })
     if (!response.ok) {
-      setError("Could not create share link")
+      setError(t("couldNotCreateShareLink"))
       return
     }
 
     const share = await response.json() as DocumentShareDto
     await navigator.clipboard.writeText(share.shareUrl)
-    setUploadMessage("Share link copied")
+    setUploadMessage(t("shareLinkCopied"))
     setTimeout(() => setUploadMessage(""), 1200)
   }
 
@@ -272,14 +274,14 @@ export default function DocumentsPage() {
     })
 
     if (!response.ok) {
-      setError("Could not update document")
+      setError(t("couldNotUpdateDocument"))
       return
     }
 
     const updated = await response.json() as DocumentDto
     setDocuments(prev => prev.map(doc => doc.id === updated.id ? updated : doc))
     setEditingDoc(null)
-    setUploadMessage("Document updated")
+    setUploadMessage(t("documentUpdated"))
     setTimeout(() => setUploadMessage(""), 1200)
   }
 
@@ -292,9 +294,9 @@ export default function DocumentsPage() {
     >
       <motion.div variants={item} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Documents</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">{t("documents")}</h1>
           <p className="text-muted-foreground mt-1">
-            Upload real study files. The backend stores them in Supabase Storage when configured.
+            {t("documentsSubtitle")}
           </p>
         </div>
       </motion.div>
@@ -323,10 +325,10 @@ export default function DocumentsPage() {
             </motion.div>
             <div>
               <p className="text-foreground font-medium">
-                {isDragActive ? "Drop your files here" : "Drag & drop files here"}
+                {isDragActive ? t("dropFilesHere") : t("dragDropFiles")}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                PDF, Word, and PowerPoint files are supported
+                {t("supportedFiles")}
               </p>
             </div>
           </motion.div>
@@ -349,7 +351,7 @@ export default function DocumentsPage() {
                           animate={{ width: `${uploadProgress}%` }}
                         />
                       </div>
-                      <p className="text-sm text-foreground">{uploadMessage || `Uploading... ${uploadProgress}%`}</p>
+                      <p className="text-sm text-foreground">{uploadMessage || `${t("uploading")}... ${uploadProgress}%`}</p>
                     </>
                   ) : (
                     <motion.div
@@ -358,7 +360,7 @@ export default function DocumentsPage() {
                       className="flex items-center gap-2 text-accent"
                     >
                       <Check className="w-5 h-5" />
-                      <span className="font-medium">{uploadMessage || "Upload Complete!"}</span>
+                      <span className="font-medium">{uploadMessage || t("uploadComplete")}</span>
                     </motion.div>
                   )}
                 </div>
@@ -386,7 +388,7 @@ export default function DocumentsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search documents..."
+            placeholder={t("searchDocuments")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
@@ -433,12 +435,12 @@ export default function DocumentsPage() {
       </motion.div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading documents...</div>
+        <div className="py-12 text-center text-muted-foreground">{t("loadingDocuments")}</div>
       ) : filteredDocuments.length === 0 ? (
         <div className="rounded-2xl border border-border/50 bg-secondary/20 py-14 text-center">
           <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="font-medium text-foreground">No documents yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">Upload your first file to save it in storage and SQL Server.</p>
+          <p className="font-medium text-foreground">{t("noDocuments")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("noDocumentsSubtext")}</p>
         </div>
       ) : (
         <motion.div
@@ -508,12 +510,12 @@ export default function DocumentsPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-xs">
-                        {doc.subjectName || "Uncategorized"}
+                        {doc.subjectName || t("uncategorized")}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                      <span>{formatDate(doc.createdAt)}</span>
-                      <span>{formatFileSize(doc.fileSize)}</span>
+                      <span>{formatDate(doc.createdAt, language)}</span>
+                      <span>{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
                     </div>
                   </div>
                 </div>
@@ -528,10 +530,10 @@ export default function DocumentsPage() {
                     </p>
                     <div className="flex flex-wrap items-center gap-3 mt-1">
                       <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-xs">
-                        {doc.subjectName || "Uncategorized"}
+                        {doc.subjectName || t("uncategorized")}
                       </span>
-                      <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
+                      <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
+                      <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt, language)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
@@ -554,22 +556,22 @@ export default function DocumentsPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="glass-card border-border/50">
                         <DropdownMenuItem onClick={() => viewDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Eye className="w-4 h-4" /> View
+                          <Eye className="w-4 h-4" /> {t("view")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => downloadDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Download className="w-4 h-4" /> Download
+                          <Download className="w-4 h-4" /> {t("download")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openEditDialog(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Edit3 className="w-4 h-4" /> Edit Details
+                          <Edit3 className="w-4 h-4" /> {t("editDetails")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => shareDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Share2 className="w-4 h-4" /> Share
+                          <Share2 className="w-4 h-4" /> {t("share")}
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Tag className="w-4 h-4" /> Add Tag
+                          <Tag className="w-4 h-4" /> {t("addTag")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => deleteDocument(doc.id)} className="text-destructive focus:text-destructive cursor-pointer gap-2">
-                          <X className="w-4 h-4" /> Delete
+                          <X className="w-4 h-4" /> {t("delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -599,7 +601,7 @@ export default function DocumentsPage() {
             >
               <div className="mb-5 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Edit Document</h2>
+                  <h2 className="text-lg font-semibold text-foreground">{t("editDocument")}</h2>
                   <p className="text-sm text-muted-foreground">{editingDoc.originalFileName}</p>
                 </div>
                 <button
@@ -612,7 +614,7 @@ export default function DocumentsPage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Title</label>
+                  <label className="mb-2 block text-sm font-medium text-foreground">{t("title")}</label>
                   <input
                     value={editTitle}
                     onChange={(event) => setEditTitle(event.target.value)}
@@ -620,7 +622,7 @@ export default function DocumentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Description</label>
+                  <label className="mb-2 block text-sm font-medium text-foreground">{t("description")}</label>
                   <textarea
                     value={editDescription}
                     onChange={(event) => setEditDescription(event.target.value)}
@@ -629,15 +631,15 @@ export default function DocumentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Visibility</label>
+                  <label className="mb-2 block text-sm font-medium text-foreground">{t("visibility")}</label>
                   <select
                     value={editVisibility}
                     onChange={(event) => setEditVisibility(event.target.value)}
                     className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                   >
-                    <option value="PRIVATE">Private</option>
-                    <option value="PUBLIC">Public</option>
-                    <option value="SHARED">Shared</option>
+                    <option value="PRIVATE">{t("private")}</option>
+                    <option value="PUBLIC">{t("public")}</option>
+                    <option value="SHARED">{t("shared")}</option>
                   </select>
                 </div>
               </div>
@@ -647,13 +649,13 @@ export default function DocumentsPage() {
                   onClick={() => setEditingDoc(null)}
                   className="rounded-xl border border-border/50 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button
                   onClick={saveEdit}
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
                 >
-                  Save Changes
+                  {t("saveChanges")}
                 </button>
               </div>
             </motion.div>

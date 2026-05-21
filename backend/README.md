@@ -35,6 +35,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_STORAGE_BUCKET=documents
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-2.5-flash
+GOOGLE_CLIENT_ID=your-google-web-oauth-client-id.apps.googleusercontent.com
 APP_FRONTEND_URL=http://localhost:3000
 RESEND_API_KEY=your-resend-api-key
 RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
@@ -44,6 +45,7 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/google`
 - `POST /api/auth/forgot-password`
 - `POST /api/auth/reset-password`
 - `GET /api/auth/users/{id}`
@@ -80,6 +82,13 @@ If `GEMINI_API_KEY` is configured, uploaded documents are processed by Gemini af
 - answer chat questions with document context when a chat session is linked to a document
 
 Password reset links use the frontend request origin when available. If the app is opened through a public URL, the reset email will point to that public URL. `APP_FRONTEND_URL` is only the fallback for direct API calls.
+
+Google login uses Google Identity Services on the frontend and verifies the returned ID token on the backend. Put the same Web OAuth Client ID in both places:
+
+- backend `.env`: `GOOGLE_CLIENT_ID=...apps.googleusercontent.com`
+- frontend `.env.local`: `NEXT_PUBLIC_GOOGLE_CLIENT_ID=...apps.googleusercontent.com`
+
+The value must be an OAuth 2.0 Web Client ID, not a Google API key.
 
 Seed users:
 

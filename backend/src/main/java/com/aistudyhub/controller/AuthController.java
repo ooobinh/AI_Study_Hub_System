@@ -2,6 +2,7 @@ package com.aistudyhub.controller;
 
 import com.aistudyhub.dto.auth.AuthResponse;
 import com.aistudyhub.dto.auth.ForgotPasswordRequest;
+import com.aistudyhub.dto.auth.GoogleLoginRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
@@ -34,6 +35,11 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/google")
+    public AuthResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        return authService.googleLogin(request);
     }
 
     @PostMapping("/forgot-password")

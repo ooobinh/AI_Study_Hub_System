@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import {
   User,
   Bell,
@@ -18,15 +19,6 @@ import {
   Sun,
   Smartphone
 } from "lucide-react"
-
-const tabs = [
-  { id: "profile", label: "Profile", icon: User },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "security", label: "Security", icon: Lock },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "billing", label: "Billing", icon: CreditCard },
-  { id: "help", label: "Help", icon: HelpCircle },
-]
 
 const container = {
   hidden: { opacity: 0 },
@@ -43,6 +35,15 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
   const { user } = useAuth()
+  const { t } = useLanguage()
+  const tabs = [
+    { id: "profile", label: t("profile"), icon: User },
+    { id: "notifications", label: t("notifications"), icon: Bell },
+    { id: "security", label: t("security"), icon: Lock },
+    { id: "appearance", label: t("appearance"), icon: Palette },
+    { id: "billing", label: t("billing"), icon: CreditCard },
+    { id: "help", label: t("help"), icon: HelpCircle },
+  ]
 
   useEffect(() => {
     setMounted(true)
@@ -62,8 +63,8 @@ export default function SettingsPage() {
     >
       {/* Header */}
       <motion.div variants={item}>
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your account preferences</p>
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground">{t("settings")}</h1>
+        <p className="text-muted-foreground mt-1">{t("managePreferences")}</p>
       </motion.div>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -92,7 +93,7 @@ export default function SettingsPage() {
         <motion.div variants={item} className="flex-1">
           {activeTab === "profile" && (
             <div className="glass-card rounded-xl p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Profile Information</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("profileInformation")}</h2>
               
               {/* Avatar */}
               <div className="flex items-center gap-4">
@@ -109,15 +110,15 @@ export default function SettingsPage() {
                   </motion.button>
                 </div>
                 <div>
-                  <p className="text-foreground font-medium">{user?.name || "Student"}</p>
-                  <p className="text-sm text-muted-foreground">{user?.email || "No email"}</p>
+                  <p className="text-foreground font-medium">{user?.name || t("student")}</p>
+                  <p className="text-sm text-muted-foreground">{user?.email || t("noEmail")}</p>
                 </div>
               </div>
 
               {/* Form */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">First Name</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("firstName")}</label>
                   <input
                     type="text"
                     value={firstName}
@@ -126,7 +127,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Last Name</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("lastName")}</label>
                   <input
                     type="text"
                     value={lastName}
@@ -135,7 +136,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("email")}</label>
                   <input
                     type="email"
                     value={user?.email || ""}
@@ -144,10 +145,10 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-2">Bio</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("bio")}</label>
                   <textarea
                     rows={3}
-                    value={user?.major ? `${user.major} student at ${user.university || "your university"}.` : "No bio yet."}
+                    value={user?.major ? `${user.major} ${t("bioTemplate")} ${user.university || t("yourUniversity")}.` : t("noBioYet")}
                     readOnly
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all resize-none"
                   />
@@ -160,21 +161,21 @@ export default function SettingsPage() {
                 whileTap={{ scale: 0.98 }}
               >
                 <Save className="w-4 h-4" />
-                Save Changes
+                {t("saveChanges")}
               </motion.button>
             </div>
           )}
 
           {activeTab === "notifications" && (
             <div className="glass-card rounded-xl p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Notification Preferences</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("notificationPreferences")}</h2>
               
               <div className="space-y-4">
                 {[
-                  { title: "Email Notifications", description: "Receive updates about your documents and AI chats" },
-                  { title: "Push Notifications", description: "Get notified about new features and recommendations" },
-                  { title: "Study Reminders", description: "Daily reminders to review your flashcards" },
-                  { title: "Weekly Summary", description: "Receive a weekly summary of your learning progress" },
+                  { title: t("emailNotifications"), description: t("emailNotificationsDesc") },
+                  { title: t("pushNotifications"), description: t("pushNotificationsDesc") },
+                  { title: t("studyReminders"), description: t("studyRemindersDesc") },
+                  { title: t("weeklySummary"), description: t("weeklySummaryDesc") },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-secondary/30">
                     <div>
@@ -198,15 +199,15 @@ export default function SettingsPage() {
 
           {activeTab === "appearance" && (
             <div className="glass-card rounded-xl p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Appearance</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("appearance")}</h2>
               
               <div>
-                <label className="block text-sm font-medium text-foreground mb-3">Theme</label>
+                <label className="block text-sm font-medium text-foreground mb-3">{t("theme")}</label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: "light", label: "Light", icon: Sun },
-                    { id: "dark", label: "Dark", icon: Moon },
-                    { id: "system", label: "System", icon: Smartphone },
+                    { id: "light", label: t("light"), icon: Sun },
+                    { id: "dark", label: t("dark"), icon: Moon },
+                    { id: "system", label: t("system"), icon: Smartphone },
                   ].map((option) => (
                     <motion.button
                       key={option.id}
@@ -231,30 +232,30 @@ export default function SettingsPage() {
 
           {activeTab === "security" && (
             <div className="glass-card rounded-xl p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Security Settings</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("securitySettings")}</h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Current Password</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("currentPassword")}</label>
                   <input
                     type="password"
-                    placeholder="Enter current password"
+                    placeholder={t("enterCurrentPassword")}
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">New Password</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("newPassword")}</label>
                   <input
                     type="password"
-                    placeholder="Enter new password"
+                    placeholder={t("enterNewPassword")}
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Confirm New Password</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t("confirmNewPassword")}</label>
                   <input
                     type="password"
-                    placeholder="Confirm new password"
+                    placeholder={t("confirmNewPasswordPlaceholder")}
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                   />
                 </div>
@@ -266,7 +267,7 @@ export default function SettingsPage() {
                 whileTap={{ scale: 0.98 }}
               >
                 <Lock className="w-4 h-4" />
-                Update Password
+                {t("updatePassword")}
               </motion.button>
             </div>
           )}
@@ -281,10 +282,10 @@ export default function SettingsPage() {
                 )}
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">
-                {activeTab === "billing" ? "Billing & Subscription" : "Help & Support"}
+                {activeTab === "billing" ? t("billingSubscription") : t("helpSupport")}
               </h3>
               <p className="text-muted-foreground max-w-md mx-auto">
-                This section is coming soon. Contact support at support@aistudyhub.com for assistance.
+                {t("comingSoon")}
               </p>
             </div>
           )}

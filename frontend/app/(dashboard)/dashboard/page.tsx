@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl } from "@/lib/api"
 import {
   FileText,
@@ -28,12 +29,6 @@ interface DocumentDto {
   createdAt: string
 }
 
-const aiRecommendations = [
-  { icon: Brain, title: "Review Flashcards", description: "Flashcard generation will use your uploaded documents.", action: "Start Review" },
-  { icon: Zap, title: "Quiz Available", description: "Quizzes will appear after AI processing is connected.", action: "Take Quiz" },
-  { icon: BookOpen, title: "Study Session", description: "Upload documents to start building your study history.", action: "Continue" },
-]
-
 const container = {
   hidden: { opacity: 0 },
   show: {
@@ -49,7 +44,8 @@ const item = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const firstName = user?.name?.split(" ")[0] || "Student"
+  const { t } = useLanguage()
+  const firstName = user?.name?.split(" ")[0] || t("student")
   const [recentDocuments, setRecentDocuments] = useState<DocumentDto[]>([])
 
   useEffect(() => {
@@ -63,10 +59,15 @@ export default function DashboardPage() {
 
   const subjectCount = new Set(recentDocuments.map((doc) => doc.subjectName).filter(Boolean)).size
   const stats = [
-    { icon: FileText, label: "Total Documents", value: String(recentDocuments.length), change: "real data", color: "text-primary" },
-    { icon: MessageSquare, label: "AI Chats", value: "0", change: "soon", color: "text-accent" },
-    { icon: FolderOpen, label: "Subjects", value: String(subjectCount), change: "real data", color: "text-chart-3" },
-    { icon: Upload, label: "Recent Uploads", value: String(recentDocuments.length), change: "latest", color: "text-chart-4" },
+    { icon: FileText, label: t("totalDocuments"), value: String(recentDocuments.length), change: t("realData"), color: "text-primary" },
+    { icon: MessageSquare, label: t("aiChats"), value: "0", change: t("soon"), color: "text-accent" },
+    { icon: FolderOpen, label: t("subjects"), value: String(subjectCount), change: t("realData"), color: "text-chart-3" },
+    { icon: Upload, label: t("recentUploads"), value: String(recentDocuments.length), change: t("latest"), color: "text-chart-4" },
+  ]
+  const aiRecommendations = [
+    { icon: Brain, title: t("reviewFlashcards"), description: t("reviewFlashcardsDesc"), action: t("startReview") },
+    { icon: Zap, title: t("quizAvailable"), description: t("quizAvailableDesc"), action: t("takeQuiz") },
+    { icon: BookOpen, title: t("studySession"), description: t("studySessionDesc"), action: t("continue") },
   ]
 
   return (
@@ -79,10 +80,10 @@ export default function DashboardPage() {
       <motion.div variants={item} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            Welcome back, <span className="text-primary">{firstName}</span>
+            {t("welcome")}, <span className="text-primary">{firstName}</span>
           </h1>
           <p className="text-muted-foreground mt-1">
-            Ready to continue your learning journey?
+            {t("learningQuestion")}
           </p>
         </div>
         <motion.button
@@ -91,7 +92,7 @@ export default function DashboardPage() {
           whileTap={{ scale: 0.98 }}
         >
           <Sparkles className="w-4 h-4" />
-          Ask AI
+          {t("askAi")}
         </motion.button>
       </motion.div>
 
@@ -126,19 +127,19 @@ export default function DashboardPage() {
         <motion.div variants={item} className="lg:col-span-2">
           <div className="glass-card rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Recent Documents</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("recentDocuments")}</h2>
               <motion.a
                 href="/documents"
                 className="text-sm text-primary flex items-center gap-1 hover:underline"
                 whileHover={{ x: 4 }}
               >
-                View All <ArrowRight className="w-4 h-4" />
+                {t("viewAll")} <ArrowRight className="w-4 h-4" />
               </motion.a>
             </div>
             <div className="space-y-3">
               {recentDocuments.length === 0 && (
                 <div className="rounded-xl bg-secondary/30 p-6 text-center text-sm text-muted-foreground">
-                  No documents yet. Upload your first study file from the Documents page.
+                  {t("noRecentDocuments")}
                 </div>
               )}
               {recentDocuments.map((doc, i) => (
@@ -158,7 +159,7 @@ export default function DashboardPage() {
                       {doc.title || doc.originalFileName}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.subjectName || "Uncategorized"} {doc.pageCount ? `- ${doc.pageCount} pages` : ""}
+                      {doc.subjectName || t("uncategorized")} {doc.pageCount ? `- ${doc.pageCount} ${t("pages")}` : ""}
                     </p>
                   </div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -175,7 +176,7 @@ export default function DashboardPage() {
           <div className="glass-card rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">AI Recommendations</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("aiRecommendations")}</h2>
             </div>
             <div className="space-y-3">
               {aiRecommendations.map((rec, i) => (
@@ -209,13 +210,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div variants={item} className="lg:col-span-1">
           <div className="glass-card rounded-xl p-5">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-4">{t("quickActions")}</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { icon: Upload, label: "Upload", color: "bg-primary/15 text-primary" },
-                { icon: MessageSquare, label: "Chat", color: "bg-accent/15 text-accent" },
-                { icon: Brain, label: "Flashcards", color: "bg-chart-3/15 text-chart-3" },
-                { icon: Star, label: "Favorites", color: "bg-chart-4/15 text-chart-4" },
+                { icon: Upload, label: t("upload"), color: "bg-primary/15 text-primary" },
+                { icon: MessageSquare, label: t("chat"), color: "bg-accent/15 text-accent" },
+                { icon: Brain, label: t("flashcards"), color: "bg-chart-3/15 text-chart-3" },
+                { icon: Star, label: t("favorites"), color: "bg-chart-4/15 text-chart-4" },
               ].map((action) => (
                 <motion.button
                   key={action.label}
@@ -235,9 +236,9 @@ export default function DashboardPage() {
 
         <motion.div variants={item} className="lg:col-span-2">
           <div className="glass-card rounded-xl p-5">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-4">{t("recentActivity")}</h2>
             <div className="rounded-xl bg-secondary/30 p-6 text-center text-sm text-muted-foreground">
-              Activity will appear after uploads, chats, quizzes, and flashcards are connected.
+              {t("activityPlaceholder")}
             </div>
           </div>
         </motion.div>
