@@ -100,9 +100,10 @@ public class DocumentService {
         jdbcTemplate.update("""
                 INSERT INTO documents (
                     owner_id, subject_id, category_id, title, description, original_file_name,
-                    file_url, preview_url, file_type, file_size, page_count, visibility
+                    file_url, preview_url, file_type, file_size, page_count, visibility,
+                    status, download_count, view_count, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, SYSDATETIME(), SYSDATETIME())
                 """,
                 request.ownerId(),
                 request.subjectId(),
