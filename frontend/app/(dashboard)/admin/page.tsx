@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
@@ -20,6 +21,8 @@ import {
   RefreshCw,
   Database,
   AlertTriangle,
+  Bell,
+  Send,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -28,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-type AdminTab = "users" | "documents" | "reports"
+type AdminTab = "users" | "documents" | "reports" | "notifications"
 
 interface DashboardSummary {
   totalUsers: number
@@ -77,6 +80,10 @@ interface AdminReport {
   createdAt: string
 }
 
+interface MessageResponse {
+  message: string
+}
+
 const container = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
@@ -106,6 +113,21 @@ async function patchStatus<T>(path: string, status: string) {
   if (!response.ok) {
     const error = await response.json().catch(() => null)
     throw new Error(error?.message || "Could not update status")
+  }
+
+  return response.json() as Promise<T>
+}
+
+async function postJson<T>(path: string, body: unknown) {
+  const response = await fetch(`${getApiUrl()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || "Request failed")
   }
 
   return response.json() as Promise<T>
@@ -188,6 +210,13 @@ export default function AdminPage() {
   const [error, setError] = useState("")
   const [reportsError, setReportsError] = useState("")
   const [actionKey, setActionKey] = useState<string | null>(null)
+  const [notificationTarget, setNotificationTarget] = useState<"all" | "user">("all")
+  const [notificationUserId, setNotificationUserId] = useState("")
+  const [notificationTitle, setNotificationTitle] = useState("")
+  const [notificationContent, setNotificationContent] = useState("")
+  const [notificationMessage, setNotificationMessage] = useState("")
+  const [notificationError, setNotificationError] = useState("")
+  const [isSendingNotification, setIsSendingNotification] = useState(false)
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const isAdmin = user?.roles.includes("ADMIN")
@@ -317,6 +346,39 @@ export default function AdminPage() {
     }
   }
 
+  const handleSendNotification = async (event: FormEvent) => {
+    event.preventDefault()
+    setNotificationMessage("")
+    setNotificationError("")
+
+    if (!notificationTitle.trim() || !notificationContent.trim()) {
+      setNotificationError("Title and message are required.")
+      return
+    }
+
+    if (notificationTarget === "user" && !notificationUserId) {
+      setNotificationError("Choose a user to receive this notification.")
+      return
+    }
+
+    setIsSendingNotification(true)
+    try {
+      const response = await postJson<MessageResponse>("/api/admin/notifications", {
+        broadcast: notificationTarget === "all",
+        userId: notificationTarget === "user" ? Number(notificationUserId) : null,
+        title: notificationTitle.trim(),
+        content: notificationContent.trim(),
+      })
+      setNotificationMessage(response.message)
+      setNotificationTitle("")
+      setNotificationContent("")
+    } catch (err) {
+      setNotificationError(getNetworkErrorMessage(err))
+    } finally {
+      setIsSendingNotification(false)
+    }
+  }
+
   if (authLoading || !user) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
@@ -400,6 +462,7 @@ export default function AdminPage() {
           { id: "users" as const, label: "User Management", icon: Users },
           { id: "documents" as const, label: "Document Moderation", icon: FileText },
           { id: "reports" as const, label: "Reports", icon: BarChart3 },
+          { id: "notifications" as const, label: "Notifications", icon: Bell },
         ].map((tab) => (
           <motion.button
             key={tab.id}
@@ -670,6 +733,144 @@ export default function AdminPage() {
                 </p>
               </div>
             )}
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === "notifications" && (
+        <motion.div variants={item} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <form onSubmit={handleSendNotification} className="glass-card rounded-xl p-5">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Send Notification</h3>
+                <p className="text-sm text-muted-foreground">Create a message in the user notification center.</p>
+              </div>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-secondary/50 p-1">
+              {[
+                { id: "all" as const, label: "All Users" },
+                { id: "user" as const, label: "One User" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setNotificationTarget(option.id)
+                    setNotificationMessage("")
+                    setNotificationError("")
+                  }}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    notificationTarget === option.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {notificationTarget === "user" && (
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium text-foreground">Recipient</label>
+                <select
+                  value={notificationUserId}
+                  onChange={(event) => setNotificationUserId(event.target.value)}
+                  className="w-full rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">Choose a user</option>
+                  {adminUsers.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.fullName} - {row.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-medium text-foreground">Title</label>
+              <input
+                value={notificationTitle}
+                onChange={(event) => setNotificationTitle(event.target.value)}
+                maxLength={255}
+                placeholder="Maintenance update"
+                className="w-full rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-medium text-foreground">Message</label>
+              <textarea
+                value={notificationContent}
+                onChange={(event) => setNotificationContent(event.target.value)}
+                rows={6}
+                placeholder="Write the notification content..."
+                className="min-h-36 w-full resize-y rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            {notificationMessage && (
+              <div className="mb-4 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-sm text-accent">
+                {notificationMessage}
+              </div>
+            )}
+
+            {notificationError && (
+              <div className="mb-4 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {notificationError}
+              </div>
+            )}
+
+            <motion.button
+              type="submit"
+              disabled={isSendingNotification}
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              whileHover={isSendingNotification ? {} : { scale: 1.02 }}
+              whileTap={isSendingNotification ? {} : { scale: 0.98 }}
+            >
+              <Send className="h-4 w-4" />
+              {isSendingNotification ? "Sending..." : "Send Notification"}
+            </motion.button>
+          </form>
+
+          <div className="glass-card rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-primary">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Delivery</p>
+                <p className="text-xs text-muted-foreground">{formatNumber(adminUsers.length)} users loaded</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-xl border border-border/50 bg-secondary/30 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Current target</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {notificationTarget === "all"
+                    ? "All active users"
+                    : adminUsers.find((row) => String(row.id) === notificationUserId)?.fullName || "No user selected"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-secondary/30 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active users</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {formatNumber(adminUsers.filter((row) => row.status === "ACTIVE").length)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-secondary/30 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Blocked users</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {formatNumber(adminUsers.filter((row) => row.status === "BANNED").length)}
+                </p>
+              </div>
+            </div>
           </div>
         </motion.div>
       )}

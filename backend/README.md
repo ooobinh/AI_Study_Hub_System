@@ -88,6 +88,10 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `PATCH /api/admin/documents/{id}/status`
 - `GET /api/admin/reports`
 - `PATCH /api/admin/reports/{id}/status`
+- `POST /api/admin/notifications`
+- `GET /api/notifications?userId=1`
+- `PATCH /api/notifications/{id}/read?userId=1`
+- `PATCH /api/notifications/read-all?userId=1`
 - `POST /api/uploads/documents`
 - `GET /api/uploads/storage/status`
 

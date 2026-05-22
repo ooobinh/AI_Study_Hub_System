@@ -19,9 +19,11 @@ public class AdminService {
     private static final Set<String> REPORT_STATUSES = Set.of("PENDING", "RESOLVED", "REJECTED");
 
     private final JdbcTemplate jdbcTemplate;
+    private final NotificationService notificationService;
 
-    public AdminService(JdbcTemplate jdbcTemplate) {
+    public AdminService(JdbcTemplate jdbcTemplate, NotificationService notificationService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.notificationService = notificationService;
     }
 
     public List<AdminUserDto> listUsers() {
@@ -49,6 +51,26 @@ public class AdminService {
 
         if (updated == 0) {
             throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        if ("BANNED".equals(normalizedStatus)) {
+            notificationService.sendToUser(
+                    id,
+                    "Account blocked by admin",
+                    "Your account has been blocked by an administrator. Contact support if you believe this is a mistake."
+            );
+        } else if ("INACTIVE".equals(normalizedStatus)) {
+            notificationService.sendToUser(
+                    id,
+                    "Account suspended by admin",
+                    "Your account has been suspended by an administrator."
+            );
+        } else if ("ACTIVE".equals(normalizedStatus)) {
+            notificationService.sendToUser(
+                    id,
+                    "Account reactivated",
+                    "Your account has been reactivated by an administrator."
+            );
         }
 
         return findUser(id);
