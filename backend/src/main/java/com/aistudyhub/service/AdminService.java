@@ -43,6 +43,10 @@ public class AdminService {
     @Transactional
     public AdminUserDto updateUserStatus(Long id, String status) {
         String normalizedStatus = normalizeStatus(status, USER_STATUSES, "Invalid user status");
+        if (isAdminUser(id) && !"ACTIVE".equals(normalizedStatus)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Admin accounts cannot be suspended or banned");
+        }
+
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET status = ?, updated_at = SYSDATETIME()
@@ -172,6 +176,16 @@ public class AdminService {
                 WHERE ur.user_id = ?
                 ORDER BY r.role_name
                 """, String.class, userId);
+    }
+
+    private boolean isAdminUser(Long userId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM user_roles ur
+                INNER JOIN roles r ON r.role_id = ur.role_id
+                WHERE ur.user_id = ? AND r.role_name = 'ADMIN'
+                """, Integer.class, userId);
+        return count != null && count > 0;
     }
 
     private String normalizeStatus(String status, Set<String> allowedStatuses, String message) {

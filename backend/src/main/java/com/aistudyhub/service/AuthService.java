@@ -217,6 +217,34 @@ public class AuthService {
                 """, userMapper);
     }
 
+    public UserDto updateAvatar(Long id, String avatarUrl) {
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET avatar_url = ?, updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, avatarUrl, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return findById(id);
+    }
+
+    public UserDto removeAvatar(Long id) {
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET avatar_url = NULL, updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return findById(id);
+    }
+
     private UserDto findByEmail(String email) {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at

@@ -321,8 +321,12 @@ export function TopNav() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/80 to-accent/80 flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 overflow-hidden rounded-lg bg-gradient-to-br from-primary/80 to-accent/80 flex items-center justify-center">
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
               </div>
               <div className="hidden md:flex flex-col items-start">
                 <span className="text-sm font-medium text-foreground">{user?.name || t("student")}</span>

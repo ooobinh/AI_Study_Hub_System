@@ -69,11 +69,13 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `POST /api/auth/forgot-password`
 - `POST /api/auth/reset-password`
 - `GET /api/auth/users/{id}`
+- `POST /api/auth/users/{id}/avatar`
+- `DELETE /api/auth/users/{id}/avatar`
 - `GET /api/documents`
 - `POST /api/documents`
 - `GET /api/documents/{id}`
-- `PUT /api/documents/{id}`
-- `DELETE /api/documents/{id}`
+- `PUT /api/documents/{id}?userId=1`
+- `DELETE /api/documents/{id}?userId=1`
 - `POST /api/documents/{id}/favorite?userId=1`
 - `GET /api/chat/sessions?userId=1`
 - `POST /api/chat/sessions`

@@ -22,6 +22,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   loginWithGoogleCredential: (credential: string) => Promise<void>
   register: (fullName: string, email: string, password: string) => Promise<void>
+  updateUser: (nextUser: Partial<User>) => void
   logout: () => void
 }
 
@@ -121,6 +122,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('aiStudyHubToken', data.token)
   }
 
+  const updateUser = (nextUser: Partial<User>) => {
+    setUser((current) => {
+      if (!current) {
+        return current
+      }
+      const updated = { ...current, ...nextUser }
+      localStorage.setItem('aiStudyHubUser', JSON.stringify(updated))
+      return updated
+    })
+  }
+
   const logout = () => {
     setUser(null)
     localStorage.removeItem('aiStudyHubUser')
@@ -128,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

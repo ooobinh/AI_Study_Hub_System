@@ -207,6 +207,11 @@ export default function DocumentsPage() {
     return matchesSubject && matchesSearch
   })
 
+  const canManageDocument = (doc: DocumentDto) => {
+    if (!user) return false
+    return user.roles.includes("ADMIN") || String(doc.ownerId) === user.id
+  }
+
   const toggleFavorite = async (id: number) => {
     if (!user) return
     setDocuments(prev => prev.map(doc => doc.id === id ? { ...doc, favorite: !doc.favorite } : doc))
@@ -229,9 +234,11 @@ export default function DocumentsPage() {
   }
 
   const deleteDocument = async (id: number) => {
-    const response = await fetch(`${getApiUrl()}/api/documents/${id}`, { method: "DELETE" })
+    if (!user) return
+    const response = await fetch(`${getApiUrl()}/api/documents/${id}?userId=${user.id}`, { method: "DELETE" })
     if (!response.ok) {
-      setError(t("couldNotDeleteDocument"))
+      const body = await response.json().catch(() => null)
+      setError(body?.message || t("couldNotDeleteDocument"))
       return
     }
     setDocuments(prev => prev.filter(doc => doc.id !== id))
@@ -263,7 +270,9 @@ export default function DocumentsPage() {
   const saveEdit = async () => {
     if (!editingDoc) return
 
-    const response = await fetch(`${getApiUrl()}/api/documents/${editingDoc.id}`, {
+    if (!user) return
+
+    const response = await fetch(`${getApiUrl()}/api/documents/${editingDoc.id}?userId=${user.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -492,6 +501,16 @@ export default function DocumentsPage() {
                       >
                         <Share2 className="w-4 h-4" />
                       </motion.button>
+                      {canManageDocument(doc) && (
+                        <motion.button
+                          onClick={(event) => { event.stopPropagation(); deleteDocument(doc.id) }}
+                          className="p-2 rounded-lg bg-destructive/15 text-destructive"
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <X className="w-4 h-4" />
+                        </motion.button>
+                      )}
                     </motion.div>
                   </div>
 
@@ -561,18 +580,22 @@ export default function DocumentsPage() {
                         <DropdownMenuItem onClick={() => downloadDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
                           <Download className="w-4 h-4" /> {t("download")}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEditDialog(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Edit3 className="w-4 h-4" /> {t("editDetails")}
-                        </DropdownMenuItem>
+                        {canManageDocument(doc) && (
+                          <DropdownMenuItem onClick={() => openEditDialog(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
+                            <Edit3 className="w-4 h-4" /> {t("editDetails")}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => shareDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
                           <Share2 className="w-4 h-4" /> {t("share")}
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
                           <Tag className="w-4 h-4" /> {t("addTag")}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteDocument(doc.id)} className="text-destructive focus:text-destructive cursor-pointer gap-2">
-                          <X className="w-4 h-4" /> {t("delete")}
-                        </DropdownMenuItem>
+                        {canManageDocument(doc) && (
+                          <DropdownMenuItem onClick={() => deleteDocument(doc.id)} className="text-destructive focus:text-destructive cursor-pointer gap-2">
+                            <X className="w-4 h-4" /> {t("delete")}
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

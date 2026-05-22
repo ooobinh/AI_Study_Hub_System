@@ -1,7 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { useRef, useState } from "react"
 import { useAuth } from "@/components/providers/auth-provider"
+import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   User,
   Mail,
@@ -21,7 +23,10 @@ import {
   Zap,
   TrendingUp,
   Star,
-  ChevronRight
+  ChevronRight,
+  Upload,
+  Trash2,
+  X
 } from "lucide-react"
 import Link from "next/link"
 
@@ -66,10 +71,89 @@ const subjects = [
 ]
 
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
+  const [avatarMessage, setAvatarMessage] = useState("")
+  const [avatarError, setAvatarError] = useState("")
+  const [isAvatarSaving, setIsAvatarSaving] = useState(false)
   const displayName = user?.name || "Student"
   const major = user?.major || "Student"
   const university = user?.university || "University"
+  const roleLabel = user?.roles.includes("ADMIN") ? "Administrator" : "Student"
+
+  const applyBackendUser = (backendUser: {
+    fullName: string
+    email: string
+    avatarUrl?: string | null
+    university?: string | null
+    major?: string | null
+    roles: string[]
+  }) => {
+    updateUser({
+      name: backendUser.fullName,
+      email: backendUser.email,
+      avatarUrl: backendUser.avatarUrl,
+      university: backendUser.university,
+      major: backendUser.major,
+      roles: backendUser.roles,
+      role: backendUser.roles.includes("ADMIN") ? "admin" : "user",
+    })
+  }
+
+  const uploadAvatar = async (file?: File) => {
+    if (!user || !file) return
+    setAvatarError("")
+    setAvatarMessage("")
+    setIsAvatarSaving(true)
+
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+        method: "POST",
+        body: formData,
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not upload avatar")
+      }
+      applyBackendUser(body)
+      setAvatarMessage("Avatar updated")
+      setAvatarMenuOpen(false)
+    } catch (err) {
+      setAvatarError(getNetworkErrorMessage(err))
+    } finally {
+      setIsAvatarSaving(false)
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = ""
+      }
+    }
+  }
+
+  const removeAvatar = async () => {
+    if (!user) return
+    setAvatarError("")
+    setAvatarMessage("")
+    setIsAvatarSaving(true)
+    try {
+      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+        method: "DELETE",
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not remove avatar")
+      }
+      applyBackendUser(body)
+      setAvatarMessage("Avatar removed")
+      setAvatarMenuOpen(false)
+    } catch (err) {
+      setAvatarError(getNetworkErrorMessage(err))
+    } finally {
+      setIsAvatarSaving(false)
+    }
+  }
 
   return (
     <motion.div
@@ -107,23 +191,68 @@ export default function ProfilePage() {
                 className="relative"
                 whileHover={{ scale: 1.02 }}
               >
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => uploadAvatar(event.target.files?.[0])}
+                />
                 <div className="w-24 h-24 md:w-32 md:h-32 rounded-2xl bg-gradient-to-br from-primary to-accent p-1 shadow-lg shadow-primary/20">
-                  <div className="w-full h-full rounded-xl bg-background flex items-center justify-center">
-                    <User className="w-12 h-12 md:w-16 md:h-16 text-muted-foreground" />
+                  <div className="w-full h-full rounded-xl bg-background flex items-center justify-center overflow-hidden">
+                    {user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                    ) : (
+                      <User className="w-12 h-12 md:w-16 md:h-16 text-muted-foreground" />
+                    )}
                   </div>
                 </div>
                 <motion.button
+                  type="button"
+                  onClick={() => setAvatarMenuOpen((open) => !open)}
                   className="absolute -bottom-2 -right-2 w-8 h-8 md:w-10 md:h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
                   <Camera className="w-4 h-4 md:w-5 md:h-5" />
                 </motion.button>
+                {avatarMenuOpen && (
+                  <div className="absolute left-0 top-full z-20 mt-4 w-56 rounded-xl border border-border/50 bg-background/95 p-2 shadow-xl backdrop-blur">
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={isAvatarSaving}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Upload className="h-4 w-4 text-primary" />
+                      Upload avatar
+                    </button>
+                    {user?.avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={removeAvatar}
+                        disabled={isAvatarSaving}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove avatar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAvatarMenuOpen(false)}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                      Close
+                    </button>
+                  </div>
+                )}
               </motion.div>
 
               <div className="space-y-1 md:pb-2">
                 <h1 className="text-2xl md:text-3xl font-bold text-foreground">{displayName}</h1>
-                <p className="text-muted-foreground">{major} Student</p>
+                <p className="text-muted-foreground">{user?.roles.includes("ADMIN") ? "AI Study Hub Administrator" : `${major} ${roleLabel}`}</p>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground pt-1">
                   <span className="flex items-center gap-1">
                     <Mail className="w-4 h-4" />
@@ -176,6 +305,19 @@ export default function ProfilePage() {
           </motion.div>
         </div>
       </motion.div>
+
+      {(avatarMessage || avatarError) && (
+        <motion.div
+          variants={item}
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            avatarError
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "border-accent/30 bg-accent/10 text-accent"
+          }`}
+        >
+          {avatarError || avatarMessage}
+        </motion.div>
+      )}
 
       {/* Stats Grid */}
       <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">

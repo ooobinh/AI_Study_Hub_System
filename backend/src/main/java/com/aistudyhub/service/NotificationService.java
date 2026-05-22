@@ -65,6 +65,9 @@ public class NotificationService {
         if (request.userId() == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "User is required for a private notification");
         }
+        if (isAdminUser(request.userId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Choose a normal user. Admin notifications are handled internally.");
+        }
 
         sendToUser(request.userId(), request.title(), request.content());
         return new MessageResponse("Notification sent.");
@@ -95,7 +98,23 @@ public class NotificationService {
                 SELECT user_id, ?, ?, 0, SYSDATETIME()
                 FROM users
                 WHERE status = 'ACTIVE'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM user_roles ur
+                      INNER JOIN roles r ON r.role_id = ur.role_id
+                      WHERE ur.user_id = users.user_id AND r.role_name = 'ADMIN'
+                  )
                 """, title, content);
+    }
+
+    private boolean isAdminUser(Long userId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM user_roles ur
+                INNER JOIN roles r ON r.role_id = ur.role_id
+                WHERE ur.user_id = ? AND r.role_name = 'ADMIN'
+                """, Integer.class, userId);
+        return count != null && count > 0;
     }
 
     private NotificationDto findForUser(Long notificationId, Long userId) {

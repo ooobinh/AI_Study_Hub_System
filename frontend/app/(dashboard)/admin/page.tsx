@@ -275,6 +275,24 @@ export default function AdminPage() {
     )
   }, [adminUsers, searchQuery])
 
+  const normalUsers = useMemo(
+    () => adminUsers.filter((row) => !row.roles.includes("ADMIN")),
+    [adminUsers]
+  )
+
+  const activeNormalUserCount = normalUsers.filter((row) => row.status === "ACTIVE").length
+  const blockedNormalUserCount = normalUsers.filter((row) => row.status === "BANNED").length
+
+  useEffect(() => {
+    if (
+      notificationTarget === "user" &&
+      notificationUserId &&
+      !normalUsers.some((row) => String(row.id) === notificationUserId)
+    ) {
+      setNotificationUserId("")
+    }
+  }, [normalUsers, notificationTarget, notificationUserId])
+
   const stats = [
     {
       icon: Users,
@@ -527,6 +545,7 @@ export default function AdminPage() {
                 <tbody>
                   {filteredUsers.map((row) => {
                     const isCurrentUser = String(row.id) === user.id
+                    const isAdminAccount = row.roles.includes("ADMIN")
                     return (
                       <tr key={row.id} className="border-b border-border/50 transition-colors hover:bg-secondary/30">
                         <td className="p-4">
@@ -561,7 +580,8 @@ export default function AdminPage() {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <motion.button
-                                disabled={actionKey === `user-${row.id}` || isCurrentUser}
+                                disabled={actionKey === `user-${row.id}` || isCurrentUser || isAdminAccount}
+                                title={isAdminAccount ? "Admin accounts are protected" : isCurrentUser ? "You cannot change your own account status" : "User actions"}
                                 className="rounded-lg p-1 hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
@@ -573,7 +593,7 @@ export default function AdminPage() {
                               <DropdownMenuItem className="cursor-default gap-2 text-muted-foreground">
                                 <Eye className="h-4 w-4" /> ID #{row.id}
                               </DropdownMenuItem>
-                              {row.status !== "ACTIVE" && (
+                              {!isAdminAccount && row.status !== "ACTIVE" && (
                                 <DropdownMenuItem
                                   onClick={() => handleUserStatus(row.id, "ACTIVE")}
                                   className="cursor-pointer gap-2 text-accent focus:text-accent"
@@ -581,7 +601,7 @@ export default function AdminPage() {
                                   <CheckCircle className="h-4 w-4" /> Activate
                                 </DropdownMenuItem>
                               )}
-                              {row.status === "ACTIVE" && (
+                              {!isAdminAccount && row.status === "ACTIVE" && (
                                 <DropdownMenuItem
                                   onClick={() => handleUserStatus(row.id, "INACTIVE")}
                                   className="cursor-pointer gap-2 text-muted-foreground focus:text-foreground"
@@ -589,7 +609,7 @@ export default function AdminPage() {
                                   <XCircle className="h-4 w-4" /> Suspend
                                 </DropdownMenuItem>
                               )}
-                              {row.status !== "BANNED" && (
+                              {!isAdminAccount && row.status !== "BANNED" && (
                                 <DropdownMenuItem
                                   onClick={() => handleUserStatus(row.id, "BANNED")}
                                   className="cursor-pointer gap-2 text-destructive focus:text-destructive"
@@ -797,7 +817,7 @@ export default function AdminPage() {
                   className="w-full rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
                 >
                   <option value="">Choose a user</option>
-                  {adminUsers.map((row) => (
+                  {normalUsers.map((row) => (
                     <option key={row.id} value={row.id}>
                       {row.fullName} - {row.email}
                     </option>
@@ -859,7 +879,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">Delivery</p>
-                <p className="text-xs text-muted-foreground">{formatNumber(adminUsers.length)} users loaded</p>
+                <p className="text-xs text-muted-foreground">{formatNumber(normalUsers.length)} user recipients</p>
               </div>
             </div>
 
@@ -868,20 +888,20 @@ export default function AdminPage() {
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Current target</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
                   {notificationTarget === "all"
-                    ? "All active users"
-                    : adminUsers.find((row) => String(row.id) === notificationUserId)?.fullName || "No user selected"}
+                    ? "All active non-admin users"
+                    : normalUsers.find((row) => String(row.id) === notificationUserId)?.fullName || "No user selected"}
                 </p>
               </div>
               <div className="rounded-xl border border-border/50 bg-secondary/30 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active users</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {formatNumber(adminUsers.filter((row) => row.status === "ACTIVE").length)}
+                  {formatNumber(activeNormalUserCount)}
                 </p>
               </div>
               <div className="rounded-xl border border-border/50 bg-secondary/30 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Blocked users</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {formatNumber(adminUsers.filter((row) => row.status === "BANNED").length)}
+                  {formatNumber(blockedNormalUserCount)}
                 </p>
               </div>
             </div>

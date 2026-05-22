@@ -61,3 +61,12 @@ WHERE NOT EXISTS (
     WHERE [user_id] = @AdminUserId
       AND [role_id] = @AdminRoleId
 );
+
+UPDATE u
+SET [status] = 'ACTIVE',
+    [updated_at] = SYSDATETIME()
+FROM [dbo].[users] u
+INNER JOIN [dbo].[user_roles] ur ON ur.[user_id] = u.[user_id]
+INNER JOIN [dbo].[roles] r ON r.[role_id] = ur.[role_id]
+WHERE r.[role_name] = 'ADMIN'
+  AND u.[status] <> 'ACTIVE';

@@ -64,6 +64,22 @@ public class DocumentService {
         Long effectiveSubjectId = subjectId == null ? -1L : subjectId;
         Long effectiveUserId = userId == null ? -1L : userId;
 
+        if (effectiveUserId != -1L && isAdminUser(effectiveUserId)) {
+            return jdbcTemplate.query(baseSelect() + """
+                    WHERE d.status <> 'DELETED'
+                      AND (? = -1 OR d.subject_id = ?)
+                      AND (d.title LIKE ? OR d.description LIKE ? OR d.original_file_name LIKE ?)
+                    ORDER BY d.created_at DESC
+                    """,
+                    documentMapper,
+                    effectiveUserId,
+                    effectiveSubjectId,
+                    effectiveSubjectId,
+                    keyword,
+                    keyword,
+                    keyword);
+        }
+
         return jdbcTemplate.query(baseSelect() + """
                 WHERE d.status <> 'DELETED'
                   AND (
@@ -90,7 +106,7 @@ public class DocumentService {
         DocumentDto document = findByIdInternal(id, userId);
 
         if ("PRIVATE".equals(document.visibility())
-                && (userId == null || !document.ownerId().equals(userId))) {
+                && (userId == null || (!document.ownerId().equals(userId) && !isAdminUser(userId)))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "You do not have access to this document");
         }
 
@@ -132,8 +148,9 @@ public class DocumentService {
     }
 
     @Transactional
-    public DocumentDto update(Long id, UpdateDocumentRequest request) {
+    public DocumentDto update(Long id, UpdateDocumentRequest request, Long userId) {
         DocumentDto current = findByIdInternal(id, null);
+        ensureCanManageDocument(current, userId);
         jdbcTemplate.update("""
                 UPDATE documents
                 SET subject_id = ?, category_id = ?, title = ?, description = ?,
@@ -152,7 +169,9 @@ public class DocumentService {
     }
 
     @Transactional
-    public void softDelete(Long id) {
+    public void softDelete(Long id, Long userId) {
+        DocumentDto current = findByIdInternal(id, userId);
+        ensureCanManageDocument(current, userId);
         int updated = jdbcTemplate.update("""
                 UPDATE documents SET status = 'DELETED', updated_at = SYSDATETIME()
                 WHERE document_id = ?
@@ -292,6 +311,28 @@ public class DocumentService {
                 WHERE m.document_id = ?
                 ORDER BY t.tag_name
                 """, String.class, documentId);
+    }
+
+    private void ensureCanManageDocument(DocumentDto document, Long userId) {
+        if (userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "userId is required");
+        }
+        if (!document.ownerId().equals(userId) && !isAdminUser(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You can only manage your own documents");
+        }
+    }
+
+    private boolean isAdminUser(Long userId) {
+        if (userId == null || userId == -1L) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM user_roles ur
+                INNER JOIN roles r ON r.role_id = ur.role_id
+                WHERE ur.user_id = ? AND r.role_name = 'ADMIN'
+                """, Integer.class, userId);
+        return count != null && count > 0;
     }
 
     private Long nullableLong(ResultSet rs, String column) throws SQLException {

@@ -70,14 +70,18 @@ public class DocumentController {
     }
 
     @PutMapping("/{id}")
-    public DocumentDto update(@PathVariable Long id, @Valid @RequestBody UpdateDocumentRequest request) {
-        return documentService.update(id, request);
+    public DocumentDto update(
+            @PathVariable Long id,
+            @RequestParam Long userId,
+            @Valid @RequestBody UpdateDocumentRequest request
+    ) {
+        return documentService.update(id, request, userId);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        documentService.softDelete(id);
+    public void delete(@PathVariable Long id, @RequestParam Long userId) {
+        documentService.softDelete(id, userId);
     }
 
     @PostMapping("/{id}/favorite")
