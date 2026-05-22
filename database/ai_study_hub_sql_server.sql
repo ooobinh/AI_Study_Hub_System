@@ -584,6 +584,13 @@ INSERT [dbo].[roles] ([role_id], [role_name], [description]) VALUES (2, N'USER',
 INSERT [dbo].[roles] ([role_id], [role_name], [description]) VALUES (3, N'ADMIN', N'System administrator')
 SET IDENTITY_INSERT [dbo].[roles] OFF
 GO
+SET IDENTITY_INSERT [dbo].[users] ON 
+
+INSERT [dbo].[users] ([user_id], [full_name], [email], [password_hash], [university], [major], [status], [created_at], [updated_at]) VALUES (1, N'AI Study Hub Admin', N'admin@example.com', N'$2a$10$83cE5EdlLYssMSzffB/1dOVSfjBJ0rbNVLJHLV8G1BGjyPEG4Qzru', N'AI Study Hub', N'Administration', N'ACTIVE', SYSDATETIME(), SYSDATETIME())
+SET IDENTITY_INSERT [dbo].[users] OFF
+GO
+INSERT [dbo].[user_roles] ([user_id], [role_id]) VALUES (1, 3)
+GO
 SET IDENTITY_INSERT [dbo].[subjects] ON 
 
 INSERT [dbo].[subjects] ([subject_id], [subject_code], [subject_name], [description], [created_at]) VALUES (1, N'PRJ301', N'Java Web Application Development', N'Java Servlet, JSP, MVC, JDBC', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))

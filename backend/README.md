@@ -110,7 +110,9 @@ Google login uses Google Identity Services on the frontend and verifies the retu
 
 The value must be an OAuth 2.0 Web Client ID, not a Google API key.
 
-Seed users:
+Seed admin account:
 
-- `binh@example.com` / `password123`
 - `admin@example.com` / `admin123`
+
+The database script stores this password as a BCrypt hash, not plain text. If your deployed database already has `admin@example.com` with a plain password, run `../database/fix_admin_password_hash.sql` once.
+The backend also upgrades a legacy plain-text password to BCrypt on the first successful login.

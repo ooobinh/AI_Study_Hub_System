@@ -97,12 +97,13 @@ public class AuthService {
         return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
     }
 
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         String hash = jdbcTemplate.query("""
                 SELECT password_hash FROM users WHERE email = ? AND status = 'ACTIVE'
                 """, rs -> rs.next() ? rs.getString("password_hash") : null, request.email());
 
-        if (hash == null || !passwordEncoder.matches(request.password(), hash)) {
+        if (hash == null || !passwordMatches(request.email(), request.password(), hash)) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
@@ -276,6 +277,27 @@ public class AuthService {
 
     private String createDevelopmentToken(Long userId) {
         return "dev-token-" + userId;
+    }
+
+    private boolean passwordMatches(String email, String rawPassword, String storedPassword) {
+        if (looksLikeBcryptHash(storedPassword)) {
+            return passwordEncoder.matches(rawPassword, storedPassword);
+        }
+
+        if (!storedPassword.equals(rawPassword)) {
+            return false;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET password_hash = ?, updated_at = SYSDATETIME()
+                WHERE email = ?
+                """, passwordEncoder.encode(rawPassword), email);
+        return true;
+    }
+
+    private boolean looksLikeBcryptHash(String value) {
+        return value.matches("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
     }
 
     private String resetBaseUrl(String requestFrontendUrl) {
