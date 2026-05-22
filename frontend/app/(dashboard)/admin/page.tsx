@@ -186,6 +186,7 @@ export default function AdminPage() {
   const [reports, setReports] = useState<AdminReport[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [reportsError, setReportsError] = useState("")
   const [actionKey, setActionKey] = useState<string | null>(null)
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
@@ -194,17 +195,24 @@ export default function AdminPage() {
   const loadAdminData = useCallback(async () => {
     setIsLoading(true)
     setError("")
+    setReportsError("")
     try {
-      const [summaryData, usersData, documentsData, reportsData] = await Promise.all([
+      const [summaryData, usersData, documentsData] = await Promise.all([
         apiJson<DashboardSummary>("/api/analytics/summary"),
         apiJson<AdminUser[]>("/api/admin/users"),
         apiJson<AdminDocument[]>("/api/admin/documents/pending"),
-        apiJson<AdminReport[]>("/api/admin/reports"),
       ])
       setSummary(summaryData)
       setAdminUsers(usersData)
       setPendingDocuments(documentsData)
-      setReports(reportsData)
+
+      try {
+        const reportsData = await apiJson<AdminReport[]>("/api/admin/reports")
+        setReports(reportsData)
+      } catch (err) {
+        setReports([])
+        setReportsError(getNetworkErrorMessage(err))
+      }
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
@@ -298,11 +306,12 @@ export default function AdminPage() {
   const handleReportStatus = async (id: number, status: "RESOLVED" | "REJECTED") => {
     setActionKey(`report-${id}`)
     setError("")
+    setReportsError("")
     try {
       const updatedReport = await patchStatus<AdminReport>(`/api/admin/reports/${id}/status`, status)
       setReports((current) => current.map((row) => row.id === id ? updatedReport : row))
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setReportsError(getNetworkErrorMessage(err))
     } finally {
       setActionKey(null)
     }
@@ -592,6 +601,18 @@ export default function AdminPage() {
             <h3 className="text-lg font-semibold text-foreground">User Reports</h3>
             <p className="mt-1 text-sm text-muted-foreground">Loaded from the reports table.</p>
           </div>
+          {reportsError && (
+            <div className="flex items-start gap-3 rounded-xl border border-chart-4/30 bg-chart-4/10 px-4 py-3 text-sm text-chart-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-foreground">Reports API is not available from the current backend.</p>
+                <p className="mt-1 text-muted-foreground">
+                  Redeploy the backend with the latest admin routes, then refresh this page.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">{reportsError}</p>
+              </div>
+            </div>
+          )}
           <div className="space-y-3">
             {reports.map((report) => (
               <div key={report.id} className="glass-card rounded-xl p-4">
@@ -641,8 +662,12 @@ export default function AdminPage() {
             {!isLoading && reports.length === 0 && (
               <div className="glass-card rounded-xl p-8 text-center">
                 <BarChart3 className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                <p className="font-medium text-foreground">No reports found</p>
-                <p className="mt-1 text-sm text-muted-foreground">The reports table is currently empty.</p>
+                <p className="font-medium text-foreground">
+                  {reportsError ? "Reports unavailable" : "No reports found"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {reportsError ? "The rest of the admin dashboard is still using live database data." : "The reports table is currently empty."}
+                </p>
               </div>
             )}
           </div>
