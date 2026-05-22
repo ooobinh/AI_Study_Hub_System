@@ -56,6 +56,11 @@ public class AdminController {
         return documentService.pendingReview();
     }
 
+    @GetMapping("/documents")
+    public List<DocumentDto> documents(@RequestParam Long adminId) {
+        return documentService.listForAdmin(adminId);
+    }
+
     @PatchMapping("/documents/{id}/status")
     public DocumentDto updateDocumentStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request) {
         return documentService.updateStatus(id, request.status());

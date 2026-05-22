@@ -89,6 +89,7 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/{id}/status`
 - `DELETE /api/admin/users/{id}?adminId=1`
+- `GET /api/admin/documents?adminId=1`
 - `GET /api/admin/documents/pending`
 - `PATCH /api/admin/documents/{id}/status`
 - `GET /api/admin/reports`

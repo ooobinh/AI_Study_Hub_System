@@ -205,7 +205,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
-  const [pendingDocuments, setPendingDocuments] = useState<AdminDocument[]>([])
+  const [adminDocuments, setAdminDocuments] = useState<AdminDocument[]>([])
   const [reports, setReports] = useState<AdminReport[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
@@ -224,6 +224,10 @@ export default function AdminPage() {
   const isAdmin = user?.roles.includes("ADMIN")
 
   const loadAdminData = useCallback(async () => {
+    if (!user?.id) {
+      return
+    }
+
     setIsLoading(true)
     setError("")
     setReportsError("")
@@ -231,11 +235,11 @@ export default function AdminPage() {
       const [summaryData, usersData, documentsData] = await Promise.all([
         apiJson<DashboardSummary>("/api/analytics/summary"),
         apiJson<AdminUser[]>("/api/admin/users"),
-        apiJson<AdminDocument[]>("/api/admin/documents/pending"),
+        apiJson<AdminDocument[]>(`/api/admin/documents?adminId=${user.id}`),
       ])
       setSummary(summaryData)
       setAdminUsers(usersData)
-      setPendingDocuments(documentsData)
+      setAdminDocuments(documentsData)
 
       try {
         const reportsData = await apiJson<AdminReport[]>("/api/admin/reports")
@@ -249,7 +253,7 @@ export default function AdminPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
@@ -679,26 +683,43 @@ export default function AdminPage() {
       {activeTab === "documents" && (
         <motion.div variants={item} className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">Pending Documents for Review</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Loaded from documents where status is PENDING_REVIEW.</p>
+            <h3 className="text-lg font-semibold text-foreground">Uploaded Documents</h3>
+            <p className="mt-1 text-sm text-muted-foreground">All user-uploaded documents from the database, sorted by upload date.</p>
           </div>
           <div className="space-y-3">
-            {pendingDocuments.map((doc) => (
+            {adminDocuments.map((doc) => (
               <div key={doc.id} className="glass-card flex flex-col gap-4 rounded-xl p-4 md:flex-row md:items-center">
                 <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary/15">
                   <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{doc.title || doc.originalFileName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Uploaded by {doc.ownerName} - {doc.subjectName || doc.categoryName || "Uncategorized"} - {formatBytes(doc.fileSize)}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>Uploaded by <span className="font-medium text-foreground/80">{doc.ownerName}</span></span>
+                    <span>-</span>
+                    <span>{formatDate(doc.createdAt)}</span>
+                    <span>-</span>
+                    <span>{doc.subjectName || doc.categoryName || "Uncategorized"}</span>
+                    <span>-</span>
+                    <span>{formatBytes(doc.fileSize)}</span>
+                  </div>
                 </div>
-                <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
+                <span className={`w-fit rounded-md border px-2 py-1 text-xs font-medium ${statusStyle(doc.status)}`}>
+                  {doc.status}
+                </span>
                 <div className="flex items-center gap-2">
                   <motion.button
+                    onClick={() => router.push(`/documents/${doc.id}/view`)}
+                    className="rounded-lg bg-secondary/60 p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    title="View document"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </motion.button>
+                  <motion.button
                     onClick={() => handleDocumentStatus(doc.id, "ACTIVE")}
-                    disabled={actionKey === `document-${doc.id}`}
+                    disabled={actionKey === `document-${doc.id}` || doc.status === "ACTIVE"}
                     className="rounded-lg bg-accent/15 p-2 text-accent transition-colors hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Approve"
                     whileHover={{ scale: 1.1 }}
@@ -708,7 +729,7 @@ export default function AdminPage() {
                   </motion.button>
                   <motion.button
                     onClick={() => handleDocumentStatus(doc.id, "REJECTED")}
-                    disabled={actionKey === `document-${doc.id}`}
+                    disabled={actionKey === `document-${doc.id}` || doc.status === "REJECTED"}
                     className="rounded-lg bg-destructive/15 p-2 text-destructive transition-colors hover:bg-destructive/25 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Reject"
                     whileHover={{ scale: 1.1 }}
@@ -719,11 +740,11 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
-            {!isLoading && pendingDocuments.length === 0 && (
+            {!isLoading && adminDocuments.length === 0 && (
               <div className="glass-card rounded-xl p-8 text-center">
                 <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                <p className="font-medium text-foreground">No pending documents</p>
-                <p className="mt-1 text-sm text-muted-foreground">There are no PENDING_REVIEW documents in the database.</p>
+                <p className="font-medium text-foreground">No uploaded documents</p>
+                <p className="mt-1 text-sm text-muted-foreground">Documents uploaded by users will appear here with uploader name and date.</p>
               </div>
             )}
           </div>

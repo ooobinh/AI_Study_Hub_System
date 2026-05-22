@@ -102,6 +102,17 @@ public class DocumentService {
                 keyword);
     }
 
+    public List<DocumentDto> listForAdmin(Long adminId) {
+        if (adminId == null || !isAdminUser(adminId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Only admins can view all documents");
+        }
+
+        return jdbcTemplate.query(baseSelect() + """
+                WHERE d.status <> 'DELETED'
+                ORDER BY d.created_at DESC
+                """, documentMapper, adminId);
+    }
+
     public DocumentDto findById(Long id, Long userId) {
         DocumentDto document = findByIdInternal(id, userId);
 
