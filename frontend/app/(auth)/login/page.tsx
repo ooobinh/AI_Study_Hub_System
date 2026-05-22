@@ -4,9 +4,11 @@ import { motion } from "framer-motion"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Sparkles, Mail, Lock, User, Github, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { LanguageSwitcher } from "@/components/layout/language-switcher"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
-import { emailFormatMessage, isValidEmail } from "@/lib/validation"
+import { isValidEmail } from "@/lib/validation"
 
 type GoogleCredentialResponse = {
   credential?: string
@@ -56,12 +58,13 @@ export default function AuthPage() {
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const router = useRouter()
   const { login, loginWithGoogleCredential, register } = useAuth()
+  const { t } = useLanguage()
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
   const emailIsInvalid = emailTouched && email.trim().length > 0 && !isValidEmail(email)
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
     if (!response.credential) {
-      setError("Google did not return a login token. Please try again.")
+      setError(t("googleNoToken"))
       return
     }
 
@@ -76,11 +79,11 @@ export default function AuthPage() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [loginWithGoogleCredential, router])
+  }, [loginWithGoogleCredential, router, t])
 
   const handleGoogleButtonClick = () => {
     if (!googleClientId) {
-      setError("Google login is not configured. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID in frontend/.env.local and GOOGLE_CLIENT_ID in backend/.env.")
+      setError(t("googleNotConfigured"))
       return
     }
     window.google?.accounts.id.prompt()
@@ -131,9 +134,9 @@ export default function AuthPage() {
     script.async = true
     script.defer = true
     script.onload = renderGoogleButton
-    script.onerror = () => setError("Could not load Google login. Please check your connection and try again.")
+    script.onerror = () => setError(t("googleLoadFailed"))
     document.head.appendChild(script)
-  }, [googleClientId, handleGoogleCredential, isForgotPassword, isLogin])
+  }, [googleClientId, handleGoogleCredential, isForgotPassword, isLogin, t])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -143,11 +146,11 @@ export default function AuthPage() {
 
     if (isForgotPassword) {
       if (!email.trim()) {
-        setError("Please enter your email address.")
+        setError(t("pleaseEnterEmail"))
         return
       }
       if (!isValidEmail(email)) {
-        setError(emailFormatMessage)
+        setError(t("invalidEmailFormat"))
         return
       }
 
@@ -160,9 +163,9 @@ export default function AuthPage() {
         })
         const body = await response.json().catch(() => null)
         if (!response.ok) {
-          throw new Error(body?.message || "Could not send reset email")
+          throw new Error(body?.message || t("couldNotSendReset"))
         }
-        setMessage(body?.message || "If that email exists, a password reset link has been sent.")
+        setMessage(body?.message || t("resetEmailSent"))
       } catch (err) {
         setError(getNetworkErrorMessage(err))
       } finally {
@@ -172,11 +175,11 @@ export default function AuthPage() {
     }
 
     if (!email.trim() || !password.trim() || (!isLogin && !name.trim())) {
-      setError(isLogin ? "Please enter email and password." : "Please enter your name, email, and password.")
+      setError(isLogin ? t("pleaseEnterLogin") : t("pleaseEnterRegister"))
       return
     }
     if (!isValidEmail(email)) {
-      setError(emailFormatMessage)
+      setError(t("invalidEmailFormat"))
       return
     }
 
@@ -197,6 +200,10 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
+      <div className="absolute right-4 top-4 z-30">
+        <LanguageSwitcher position="top" />
+      </div>
+
       {/* Animated Background */}
       <div className="absolute inset-0 gradient-mesh" />
       
@@ -253,13 +260,13 @@ export default function AuthPage() {
             </motion.div>
             <div>
               <h1 className="text-xl font-bold text-foreground">AI Study Hub</h1>
-              <p className="text-xs text-muted-foreground">Smart Learning Platform</p>
+              <p className="text-xs text-muted-foreground">{t("smartLearningPlatform")}</p>
             </div>
           </motion.div>
 
           {/* Toggle */}
           <div className="flex mb-6 p-1 rounded-xl bg-secondary/50">
-            {["Login", "Register"].map((tab, i) => (
+            {[t("login"), t("register")].map((tab, i) => (
               <motion.button
                 key={tab}
                 onClick={() => { setIsLogin(i === 0); setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
@@ -280,7 +287,7 @@ export default function AuthPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {isForgotPassword && (
               <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-muted-foreground">
-                Enter your email and we will send a secure link to create a new password.
+                {t("forgotPasswordHelp")}
               </div>
             )}
 
@@ -295,7 +302,7 @@ export default function AuthPage() {
               transition={{ duration: 0.3 }}
               className="overflow-hidden"
             >
-              <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t("fullName")}</label>
               <div className="relative group">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <input
@@ -315,7 +322,7 @@ export default function AuthPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t("emailAddress")}</label>
               <div className="relative group">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <input
@@ -323,7 +330,7 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value)
-                    if (error === emailFormatMessage) {
+                    if (error === t("invalidEmailFormat")) {
                       setError("")
                     }
                   }}
@@ -344,7 +351,7 @@ export default function AuthPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive"
                 >
-                  {emailFormatMessage}
+                  {t("invalidEmailFormat")}
                 </motion.p>
               )}
             </motion.div>
@@ -361,14 +368,14 @@ export default function AuthPage() {
               transition={{ delay: 0.3 }}
               className="overflow-hidden"
             >
-              <label className="block text-sm font-medium text-foreground mb-2">Password</label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t("password")}</label>
               <div className="relative group">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={t("enterPassword")}
                   required
                   minLength={6}
                   className="w-full pl-11 pr-12 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
@@ -396,7 +403,7 @@ export default function AuthPage() {
                   onClick={() => { setIsForgotPassword(true); setError(""); setMessage(""); setEmailTouched(false) }}
                   className="text-sm text-primary hover:underline"
                 >
-                  Forgot password?
+                  {t("forgotPassword")}
                 </button>
               </motion.div>
             )}
@@ -407,7 +414,7 @@ export default function AuthPage() {
                 onClick={() => { setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Back to sign in
+                {t("backToSignIn")}
               </button>
             )}
 
@@ -442,7 +449,7 @@ export default function AuthPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              {isSubmitting ? "Please wait..." : isForgotPassword ? "Send Reset Link" : isLogin ? "Sign In" : "Create Account"}
+              {isSubmitting ? t("pleaseWait") : isForgotPassword ? t("sendResetLink") : isLogin ? t("signIn") : t("createAccount")}
               <ArrowRight className="w-4 h-4" />
             </motion.button>
           </form>
@@ -452,7 +459,7 @@ export default function AuthPage() {
               {/* Divider */}
               <div className="flex items-center gap-4 my-6">
                 <div className="flex-1 h-px bg-border/50" />
-                <span className="text-xs text-muted-foreground">or continue with</span>
+                <span className="text-xs text-muted-foreground">{t("orContinueWith")}</span>
                 <div className="flex-1 h-px bg-border/50" />
               </div>
 
@@ -489,9 +496,9 @@ export default function AuthPage() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setError("Google login is not configured. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID in frontend/.env.local and GOOGLE_CLIENT_ID in backend/.env.")}
+                      onClick={() => setError(t("googleNotConfigured"))}
                       className="flex h-full w-full items-center justify-center gap-2 rounded-xl text-sm font-medium text-foreground hover:bg-secondary"
-                      aria-label="Google login is not configured"
+                      aria-label={t("googleNotConfigured")}
                     >
                       <svg className="w-5 h-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -519,10 +526,10 @@ export default function AuthPage() {
 
           {/* Terms */}
           <p className="text-xs text-muted-foreground text-center mt-6">
-            By continuing, you agree to our{" "}
-            <button className="text-primary hover:underline">Terms of Service</button>
-            {" "}and{" "}
-            <button className="text-primary hover:underline">Privacy Policy</button>
+            {t("termsPrefix")}{" "}
+            <button className="text-primary hover:underline">{t("termsOfService")}</button>
+            {" "}{t("and")}{" "}
+            <button className="text-primary hover:underline">{t("privacyPolicy")}</button>
           </p>
         </div>
       </motion.div>
