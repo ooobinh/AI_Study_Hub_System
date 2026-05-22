@@ -1,0 +1,162 @@
+package com.aistudyhub.service;
+
+import com.aistudyhub.common.ApiException;
+import com.aistudyhub.dto.admin.AdminReportDto;
+import com.aistudyhub.dto.admin.AdminUserDto;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Set;
+
+@Service
+public class AdminService {
+    private static final Set<String> USER_STATUSES = Set.of("ACTIVE", "INACTIVE", "BANNED");
+    private static final Set<String> REPORT_STATUSES = Set.of("PENDING", "RESOLVED", "REJECTED");
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public AdminService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public List<AdminUserDto> listUsers() {
+        return jdbcTemplate.query("""
+                SELECT u.user_id, u.full_name, u.email, u.avatar_url, u.university, u.major,
+                       u.status, u.created_at,
+                       (
+                           SELECT COUNT(*)
+                           FROM documents d
+                           WHERE d.owner_id = u.user_id AND d.status <> 'DELETED'
+                       ) AS document_count
+                FROM users u
+                ORDER BY u.created_at DESC
+                """, this::mapUser);
+    }
+
+    @Transactional
+    public AdminUserDto updateUserStatus(Long id, String status) {
+        String normalizedStatus = normalizeStatus(status, USER_STATUSES, "Invalid user status");
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET status = ?, updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, normalizedStatus, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return findUser(id);
+    }
+
+    public List<AdminReportDto> listReports() {
+        return jdbcTemplate.query("""
+                SELECT r.report_id, r.document_id, d.title AS document_title,
+                       r.reported_by, u.full_name AS reporter_name, r.reason,
+                       r.description, r.status, r.created_at
+                FROM reports r
+                INNER JOIN users u ON u.user_id = r.reported_by
+                LEFT JOIN documents d ON d.document_id = r.document_id
+                ORDER BY r.created_at DESC
+                """, this::mapReport);
+    }
+
+    @Transactional
+    public AdminReportDto updateReportStatus(Long id, String status) {
+        String normalizedStatus = normalizeStatus(status, REPORT_STATUSES, "Invalid report status");
+        int updated = jdbcTemplate.update("""
+                UPDATE reports
+                SET status = ?
+                WHERE report_id = ?
+                """, normalizedStatus, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Report not found");
+        }
+
+        return findReport(id);
+    }
+
+    private AdminUserDto findUser(Long id) {
+        return jdbcTemplate.query("""
+                SELECT u.user_id, u.full_name, u.email, u.avatar_url, u.university, u.major,
+                       u.status, u.created_at,
+                       (
+                           SELECT COUNT(*)
+                           FROM documents d
+                           WHERE d.owner_id = u.user_id AND d.status <> 'DELETED'
+                       ) AS document_count
+                FROM users u
+                WHERE u.user_id = ?
+                """, this::mapUser, id).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
+    private AdminReportDto findReport(Long id) {
+        return jdbcTemplate.query("""
+                SELECT r.report_id, r.document_id, d.title AS document_title,
+                       r.reported_by, u.full_name AS reporter_name, r.reason,
+                       r.description, r.status, r.created_at
+                FROM reports r
+                INNER JOIN users u ON u.user_id = r.reported_by
+                LEFT JOIN documents d ON d.document_id = r.document_id
+                WHERE r.report_id = ?
+                """, this::mapReport, id).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Report not found"));
+    }
+
+    private AdminUserDto mapUser(ResultSet rs, int rowNum) throws SQLException {
+        Long userId = rs.getLong("user_id");
+        return new AdminUserDto(
+                userId,
+                rs.getString("full_name"),
+                rs.getString("email"),
+                rs.getString("avatar_url"),
+                rs.getString("university"),
+                rs.getString("major"),
+                rs.getString("status"),
+                findRoles(userId),
+                rs.getLong("document_count"),
+                rs.getTimestamp("created_at").toLocalDateTime()
+        );
+    }
+
+    private AdminReportDto mapReport(ResultSet rs, int rowNum) throws SQLException {
+        long documentId = rs.getLong("document_id");
+        boolean documentIdWasNull = rs.wasNull();
+        return new AdminReportDto(
+                rs.getLong("report_id"),
+                documentIdWasNull ? null : documentId,
+                rs.getString("document_title"),
+                rs.getLong("reported_by"),
+                rs.getString("reporter_name"),
+                rs.getString("reason"),
+                rs.getString("description"),
+                rs.getString("status"),
+                rs.getTimestamp("created_at").toLocalDateTime()
+        );
+    }
+
+    private List<String> findRoles(Long userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT r.role_name
+                FROM roles r
+                INNER JOIN user_roles ur ON ur.role_id = r.role_id
+                WHERE ur.user_id = ?
+                ORDER BY r.role_name
+                """, String.class, userId);
+    }
+
+    private String normalizeStatus(String status, Set<String> allowedStatuses, String message) {
+        String normalizedStatus = status == null ? "" : status.trim().toUpperCase();
+        if (!allowedStatuses.contains(normalizedStatus)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, message);
+        }
+        return normalizedStatus;
+    }
+}

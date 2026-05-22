@@ -14,10 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class DocumentService {
+    private static final Set<String> DOCUMENT_STATUSES = Set.of("ACTIVE", "PENDING_REVIEW", "REJECTED", "DELETED");
+
     private final JdbcTemplate jdbcTemplate;
 
     private final RowMapper<DocumentDto> documentMapper = new RowMapper<>() {
@@ -233,6 +236,26 @@ public class DocumentService {
                 WHERE d.status = 'PENDING_REVIEW'
                 ORDER BY d.created_at DESC
                 """, documentMapper, -1L);
+    }
+
+    @Transactional
+    public DocumentDto updateStatus(Long id, String status) {
+        String normalizedStatus = status == null ? "" : status.trim().toUpperCase();
+        if (!DOCUMENT_STATUSES.contains(normalizedStatus)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid document status");
+        }
+
+        int updated = jdbcTemplate.update("""
+                UPDATE documents
+                SET status = ?, updated_at = SYSDATETIME()
+                WHERE document_id = ?
+                """, normalizedStatus, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Document not found");
+        }
+
+        return findByIdInternal(id, null);
     }
 
     private DocumentDto findByIdInternal(Long id, Long userId) {

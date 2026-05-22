@@ -83,7 +83,11 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `POST /api/chat/sessions/{sessionId}/ask`
 - `GET /api/analytics/summary`
 - `GET /api/admin/users`
+- `PATCH /api/admin/users/{id}/status`
 - `GET /api/admin/documents/pending`
+- `PATCH /api/admin/documents/{id}/status`
+- `GET /api/admin/reports`
+- `PATCH /api/admin/reports/{id}/status`
 - `POST /api/uploads/documents`
 - `GET /api/uploads/storage/status`
 
