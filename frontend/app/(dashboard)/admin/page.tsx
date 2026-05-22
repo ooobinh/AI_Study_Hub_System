@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Bell,
   Send,
+  Trash2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -210,6 +211,7 @@ export default function AdminPage() {
   const [error, setError] = useState("")
   const [reportsError, setReportsError] = useState("")
   const [actionKey, setActionKey] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const [notificationTarget, setNotificationTarget] = useState<"all" | "user">("all")
   const [notificationUserId, setNotificationUserId] = useState("")
   const [notificationTitle, setNotificationTitle] = useState("")
@@ -330,6 +332,37 @@ export default function AdminPage() {
     try {
       const updatedUser = await patchStatus<AdminUser>(`/api/admin/users/${id}/status`, status)
       setAdminUsers((current) => current.map((row) => row.id === id ? updatedUser : row))
+    } catch (err) {
+      setError(getNetworkErrorMessage(err))
+    } finally {
+      setActionKey(null)
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!user || !deleteTarget) {
+      return
+    }
+
+    const id = deleteTarget.id
+    setActionKey(`user-${id}`)
+    setError("")
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/users/${id}?adminId=${user.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.message || "Could not delete account")
+      }
+
+      setAdminUsers((current) => current.filter((row) => row.id !== id))
+      setSummary((current) => current ? {
+        ...current,
+        totalUsers: Math.max(0, current.totalUsers - 1),
+      } : current)
+      setDeleteTarget(null)
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
@@ -615,6 +648,14 @@ export default function AdminPage() {
                                   className="cursor-pointer gap-2 text-destructive focus:text-destructive"
                                 >
                                   <Ban className="h-4 w-4" /> Ban
+                                </DropdownMenuItem>
+                              )}
+                              {!isAdminAccount && !isCurrentUser && (
+                                <DropdownMenuItem
+                                  onClick={() => setDeleteTarget(row)}
+                                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" /> Delete Account
                                 </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
@@ -908,6 +949,70 @@ export default function AdminPage() {
           </div>
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              if (actionKey !== `user-${deleteTarget.id}`) {
+                setDeleteTarget(null)
+              }
+            }}
+          >
+            <motion.div
+              className="glass-card w-full max-w-md rounded-xl border border-border/60 p-5 shadow-2xl"
+              initial={{ scale: 0.96, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 16 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-foreground">Delete account</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This will hide the account, anonymize the email, and block future login.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-xl border border-border/50 bg-secondary/40 p-3">
+                <p className="truncate text-sm font-medium text-foreground">{deleteTarget.fullName}</p>
+                <p className="truncate text-xs text-muted-foreground">{deleteTarget.email}</p>
+              </div>
+
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <motion.button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={actionKey === `user-${deleteTarget.id}`}
+                  className="rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                  whileHover={actionKey === `user-${deleteTarget.id}` ? {} : { scale: 1.02 }}
+                  whileTap={actionKey === `user-${deleteTarget.id}` ? {} : { scale: 0.98 }}
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={handleDeleteUser}
+                  disabled={actionKey === `user-${deleteTarget.id}`}
+                  className="rounded-xl bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+                  whileHover={actionKey === `user-${deleteTarget.id}` ? {} : { scale: 1.02 }}
+                  whileTap={actionKey === `user-${deleteTarget.id}` ? {} : { scale: 0.98 }}
+                >
+                  {actionKey === `user-${deleteTarget.id}` ? "Deleting..." : "Delete account"}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

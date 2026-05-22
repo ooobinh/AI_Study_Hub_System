@@ -86,6 +86,7 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `GET /api/analytics/summary`
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/{id}/status`
+- `DELETE /api/admin/users/{id}?adminId=1`
 - `GET /api/admin/documents/pending`
 - `PATCH /api/admin/documents/{id}/status`
 - `GET /api/admin/reports`
@@ -127,3 +128,5 @@ Seed admin account:
 
 The database script stores this password as a BCrypt hash, not plain text. If your deployed database already has `admin@example.com` with a plain password, run `../database/fix_admin_password_hash.sql` once.
 The backend also upgrades a legacy plain-text password to BCrypt on the first successful login.
+
+If your deployed database was created before account deletion was added, run `../database/add_deleted_user_status.sql` once so SQL Server accepts the `DELETED` user status.

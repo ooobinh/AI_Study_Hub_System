@@ -1124,7 +1124,7 @@ ALTER TABLE [dbo].[user_settings]  WITH CHECK ADD  CONSTRAINT [chk_user_settings
 GO
 ALTER TABLE [dbo].[user_settings] CHECK CONSTRAINT [chk_user_settings_theme]
 GO
-ALTER TABLE [dbo].[users]  WITH CHECK ADD  CONSTRAINT [chk_users_status] CHECK  (([status]='BANNED' OR [status]='INACTIVE' OR [status]='ACTIVE'))
+ALTER TABLE [dbo].[users]  WITH CHECK ADD  CONSTRAINT [chk_users_status] CHECK  (([status]='DELETED' OR [status]='BANNED' OR [status]='INACTIVE' OR [status]='ACTIVE'))
 GO
 ALTER TABLE [dbo].[users] CHECK CONSTRAINT [chk_users_status]
 GO

@@ -10,12 +10,14 @@ import com.aistudyhub.service.AdminService;
 import com.aistudyhub.service.DocumentService;
 import com.aistudyhub.service.NotificationService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -41,6 +43,12 @@ public class AdminController {
     @PatchMapping("/users/{id}/status")
     public AdminUserDto updateUserStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request) {
         return adminService.updateUserStatus(id, request.status());
+    }
+
+    @DeleteMapping("/users/{id}")
+    public MessageResponse deleteUser(@PathVariable Long id, @RequestParam Long adminId) {
+        adminService.deleteUser(id, adminId);
+        return new MessageResponse("Account deleted.");
     }
 
     @GetMapping("/documents/pending")

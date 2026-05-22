@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class AdminService {
@@ -36,6 +37,7 @@ public class AdminService {
                            WHERE d.owner_id = u.user_id AND d.status <> 'DELETED'
                        ) AS document_count
                 FROM users u
+                WHERE u.status <> 'DELETED'
                 ORDER BY u.created_at DESC
                 """, this::mapUser);
     }
@@ -50,7 +52,7 @@ public class AdminService {
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET status = ?, updated_at = SYSDATETIME()
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'DELETED'
                 """, normalizedStatus, id);
 
         if (updated == 0) {
@@ -78,6 +80,47 @@ public class AdminService {
         }
 
         return findUser(id);
+    }
+
+    @Transactional
+    public void deleteUser(Long id, Long adminId) {
+        if (adminId == null || !isAdminUser(adminId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Only admins can delete accounts");
+        }
+        if (id.equals(adminId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "You cannot delete your own admin account");
+        }
+        if (isAdminUser(id)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Admin accounts cannot be deleted");
+        }
+
+        String anonymizedEmail = "deleted-user-%d-%s@deleted.local".formatted(id, UUID.randomUUID());
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET full_name = ?,
+                    email = ?,
+                    password_hash = ?,
+                    avatar_url = NULL,
+                    phone = NULL,
+                    university = NULL,
+                    major = NULL,
+                    status = 'DELETED',
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                  AND status <> 'DELETED'
+                """,
+                "Deleted User #" + id,
+                anonymizedEmail,
+                UUID.randomUUID().toString() + UUID.randomUUID(),
+                id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        jdbcTemplate.update("DELETE FROM notifications WHERE user_id = ?", id);
+        jdbcTemplate.update("DELETE FROM password_reset_tokens WHERE user_id = ?", id);
+        jdbcTemplate.update("DELETE FROM user_settings WHERE user_id = ?", id);
     }
 
     public List<AdminReportDto> listReports() {
@@ -118,7 +161,7 @@ public class AdminService {
                            WHERE d.owner_id = u.user_id AND d.status <> 'DELETED'
                        ) AS document_count
                 FROM users u
-                WHERE u.user_id = ?
+                WHERE u.user_id = ? AND u.status <> 'DELETED'
                 """, this::mapUser, id).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
     }

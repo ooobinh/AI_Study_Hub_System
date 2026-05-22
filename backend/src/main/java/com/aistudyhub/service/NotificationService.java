@@ -78,7 +78,7 @@ public class NotificationService {
         Integer exists = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM users
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'DELETED'
                 """, Integer.class, userId);
 
         if (exists == null || exists == 0) {

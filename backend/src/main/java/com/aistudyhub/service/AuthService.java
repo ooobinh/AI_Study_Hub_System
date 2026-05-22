@@ -204,7 +204,7 @@ public class AuthService {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
                 FROM users
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'DELETED'
                 """, userMapper, id).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
     }
@@ -213,6 +213,7 @@ public class AuthService {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
                 FROM users
+                WHERE status <> 'DELETED'
                 ORDER BY created_at DESC
                 """, userMapper);
     }
@@ -221,7 +222,7 @@ public class AuthService {
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET avatar_url = ?, updated_at = SYSDATETIME()
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'DELETED'
                 """, avatarUrl, id);
 
         if (updated == 0) {
@@ -235,7 +236,7 @@ public class AuthService {
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET avatar_url = NULL, updated_at = SYSDATETIME()
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'DELETED'
                 """, id);
 
         if (updated == 0) {
@@ -249,7 +250,7 @@ public class AuthService {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
                 FROM users
-                WHERE email = ?
+                WHERE email = ? AND status <> 'DELETED'
                 """, userMapper, email).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
     }
@@ -266,12 +267,12 @@ public class AuthService {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
                 FROM users
-                WHERE email = ?
+                WHERE email = ? AND status <> 'DELETED'
                 """, userMapper, email).stream().findFirst().orElse(null);
     }
 
     private boolean emailExists(String email) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE email = ?", Integer.class, email);
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE email = ? AND status <> 'DELETED'", Integer.class, email);
         return count != null && count > 0;
     }
 

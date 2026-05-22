@@ -14,7 +14,7 @@ public class AnalyticsService {
 
     public DashboardSummaryDto dashboardSummary() {
         return new DashboardSummaryDto(
-                count("users", null),
+                count("users", "status <> 'DELETED'"),
                 count("documents", "status <> 'DELETED'"),
                 count("documents", "visibility = 'PUBLIC' AND status <> 'DELETED'"),
                 count("chat_sessions", null),
