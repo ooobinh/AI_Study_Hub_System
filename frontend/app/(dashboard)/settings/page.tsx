@@ -20,6 +20,8 @@ import {
   Smartphone
 } from "lucide-react"
 
+const tabIds = ["profile", "notifications", "security", "appearance", "billing", "help"]
+
 const container = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -47,7 +49,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMounted(true)
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (tab && tabIds.includes(tab)) {
+      setActiveTab(tab)
+    }
   }, [])
+
+  const selectTab = (tab: string) => {
+    setActiveTab(tab)
+    const nextUrl = tab === "profile" ? "/settings" : `/settings?tab=${tab}`
+    window.history.replaceState(null, "", nextUrl)
+  }
 
   const selectedTheme = mounted ? theme : "dark"
   const nameParts = user?.name?.trim().split(/\s+/) || []
@@ -74,7 +86,7 @@ export default function SettingsPage() {
             {tabs.map((tab) => (
               <motion.button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => selectTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
                   activeTab === tab.id
                     ? "bg-primary/15 text-primary"

@@ -77,6 +77,8 @@ RESEND_FROM_EMAIL=AI Study Hub <onboarding@resend.dev>
 - `PUT /api/documents/{id}?userId=1`
 - `DELETE /api/documents/{id}?userId=1`
 - `POST /api/documents/{id}/favorite?userId=1`
+- `GET /api/subjects?userId=1`
+- `POST /api/subjects?userId=1`
 - `GET /api/chat/sessions?userId=1`
 - `POST /api/chat/sessions`
 - `GET /api/chat/sessions/{sessionId}/messages`

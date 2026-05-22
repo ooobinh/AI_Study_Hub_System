@@ -337,13 +337,22 @@ export function TopNav() {
           <DropdownMenuContent align="end" className="w-56 glass-card border-border/50">
             <DropdownMenuLabel className="text-foreground">{t("myAccount")}</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border/50" />
-            <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => router.push("/profile")}
+              className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer"
+            >
               {t("profile")}
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => router.push("/settings")}
+              className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer"
+            >
               {t("settings")}
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => router.push("/settings?tab=billing")}
+              className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer"
+            >
               {t("billing")}
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border/50" />

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl } from "@/lib/api"
@@ -29,6 +30,10 @@ interface DocumentDto {
   createdAt: string
 }
 
+interface SubjectDto {
+  id: number
+}
+
 const container = {
   hidden: { opacity: 0 },
   show: {
@@ -45,24 +50,36 @@ const item = {
 export default function DashboardPage() {
   const { user } = useAuth()
   const { t } = useLanguage()
+  const router = useRouter()
   const firstName = user?.name?.split(" ")[0] || t("student")
   const [recentDocuments, setRecentDocuments] = useState<DocumentDto[]>([])
+  const [documentCount, setDocumentCount] = useState(0)
+  const [subjects, setSubjects] = useState<SubjectDto[]>([])
 
   useEffect(() => {
     if (!user) return
 
-    fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
-      .then((response) => response.ok ? response.json() : [])
-      .then((data: DocumentDto[]) => setRecentDocuments(data.slice(0, 4)))
-      .catch(() => setRecentDocuments([]))
+    Promise.all([
+      fetch(`${getApiUrl()}/api/documents?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
+      fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
+    ])
+      .then(([documentsData, subjectsData]: [DocumentDto[], SubjectDto[]]) => {
+        setDocumentCount(documentsData.length)
+        setRecentDocuments(documentsData.slice(0, 4))
+        setSubjects(subjectsData)
+      })
+      .catch(() => {
+        setDocumentCount(0)
+        setRecentDocuments([])
+        setSubjects([])
+      })
   }, [user])
 
-  const subjectCount = new Set(recentDocuments.map((doc) => doc.subjectName).filter(Boolean)).size
   const stats = [
-    { icon: FileText, label: t("totalDocuments"), value: String(recentDocuments.length), change: t("realData"), color: "text-primary" },
-    { icon: MessageSquare, label: t("aiChats"), value: "0", change: t("soon"), color: "text-accent" },
-    { icon: FolderOpen, label: t("subjects"), value: String(subjectCount), change: t("realData"), color: "text-chart-3" },
-    { icon: Upload, label: t("recentUploads"), value: String(recentDocuments.length), change: t("latest"), color: "text-chart-4" },
+    { icon: FileText, label: t("totalDocuments"), value: String(documentCount), change: t("realData"), color: "text-primary", href: "/documents" },
+    { icon: MessageSquare, label: t("aiChats"), value: "0", change: t("soon"), color: "text-accent", href: "/chat" },
+    { icon: FolderOpen, label: t("subjects"), value: String(subjects.length), change: t("realData"), color: "text-chart-3", href: "/subjects" },
+    { icon: Upload, label: t("recentUploads"), value: String(recentDocuments.length), change: t("latest"), color: "text-chart-4", href: "/documents" },
   ]
   const aiRecommendations = [
     { icon: Brain, title: t("reviewFlashcards"), description: t("reviewFlashcardsDesc"), action: t("startReview") },
@@ -87,6 +104,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <motion.button
+          onClick={() => router.push("/chat")}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium w-fit"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
@@ -98,9 +116,10 @@ export default function DashboardPage() {
 
       <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
-          <motion.div
+          <motion.button
             key={stat.label}
-            className="glass-card rounded-xl p-5 hover:border-primary/30 transition-all duration-300"
+            onClick={() => router.push(stat.href)}
+            className="glass-card rounded-xl p-5 text-left hover:border-primary/30 transition-all duration-300"
             whileHover={{ y: -4, scale: 1.02 }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -119,7 +138,7 @@ export default function DashboardPage() {
               <p className="text-2xl font-bold text-foreground">{stat.value}</p>
               <p className="text-sm text-muted-foreground">{stat.label}</p>
             </div>
-          </motion.div>
+          </motion.button>
         ))}
       </motion.div>
 
@@ -213,13 +232,14 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-foreground mb-4">{t("quickActions")}</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { icon: Upload, label: t("upload"), color: "bg-primary/15 text-primary" },
-                { icon: MessageSquare, label: t("chat"), color: "bg-accent/15 text-accent" },
-                { icon: Brain, label: t("flashcards"), color: "bg-chart-3/15 text-chart-3" },
-                { icon: Star, label: t("favorites"), color: "bg-chart-4/15 text-chart-4" },
+                { icon: Upload, label: t("upload"), color: "bg-primary/15 text-primary", href: "/documents" },
+                { icon: MessageSquare, label: t("chat"), color: "bg-accent/15 text-accent", href: "/chat" },
+                { icon: Brain, label: t("flashcards"), color: "bg-chart-3/15 text-chart-3", href: "/chat" },
+                { icon: Star, label: t("favorites"), color: "bg-chart-4/15 text-chart-4", href: "/documents" },
               ].map((action) => (
                 <motion.button
                   key={action.label}
+                  onClick={() => router.push(action.href)}
                   className="flex flex-col items-center gap-2 p-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}

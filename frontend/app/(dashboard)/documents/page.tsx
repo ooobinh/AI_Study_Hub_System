@@ -35,6 +35,7 @@ interface DocumentDto {
   id: number
   ownerId: number
   ownerName: string
+  subjectId?: number | null
   subjectName?: string | null
   categoryName?: string | null
   title: string
@@ -53,6 +54,12 @@ interface DocumentDto {
 
 interface DocumentShareDto {
   shareUrl: string
+}
+
+interface SubjectDto {
+  id: number
+  code: string
+  name: string
 }
 
 async function uploadFileToBackend(file: File, ownerId: string): Promise<DocumentDto> {
@@ -113,12 +120,14 @@ export default function DocumentsPage() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadMessage, setUploadMessage] = useState("")
   const [documents, setDocuments] = useState<DocumentDto[]>([])
+  const [availableSubjects, setAvailableSubjects] = useState<SubjectDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [editingDoc, setEditingDoc] = useState<DocumentDto | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
   const [editVisibility, setEditVisibility] = useState("PRIVATE")
+  const [editSubjectId, setEditSubjectId] = useState("")
 
   const loadDocuments = useCallback(async () => {
     if (!user) return
@@ -126,12 +135,20 @@ export default function DocumentsPage() {
     setError("")
 
     try {
-      const response = await fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
-      if (!response.ok) {
+      const [documentsResponse, subjectsResponse] = await Promise.all([
+        fetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
+        fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
+      ])
+      if (!documentsResponse.ok) {
         throw new Error(t("couldNotLoadDocuments"))
       }
-      const data = await response.json() as DocumentDto[]
+      if (!subjectsResponse.ok) {
+        throw new Error("Could not load subjects")
+      }
+      const data = await documentsResponse.json() as DocumentDto[]
+      const subjectsData = await subjectsResponse.json() as SubjectDto[]
       setDocuments(data)
+      setAvailableSubjects(subjectsData)
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
@@ -265,6 +282,7 @@ export default function DocumentsPage() {
     setEditTitle(doc.title || doc.originalFileName)
     setEditDescription(doc.description || "")
     setEditVisibility(doc.visibility || "PRIVATE")
+    setEditSubjectId(doc.subjectId ? String(doc.subjectId) : "")
   }
 
   const saveEdit = async () => {
@@ -279,6 +297,7 @@ export default function DocumentsPage() {
         title: editTitle,
         description: editDescription,
         visibility: editVisibility,
+        subjectId: editSubjectId ? Number(editSubjectId) : null,
       }),
     })
 
@@ -663,6 +682,21 @@ export default function DocumentsPage() {
                     <option value="PRIVATE">{t("private")}</option>
                     <option value="PUBLIC">{t("public")}</option>
                     <option value="SHARED">{t("shared")}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-foreground">{t("subjects")}</label>
+                  <select
+                    value={editSubjectId}
+                    onChange={(event) => setEditSubjectId(event.target.value)}
+                    className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">{t("uncategorized")}</option>
+                    {availableSubjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name} ({subject.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

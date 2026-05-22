@@ -25,6 +25,7 @@ import {
 const navItems = [
   { icon: LayoutDashboard, labelKey: "dashboard", href: "/dashboard" },
   { icon: FileText, labelKey: "documents", href: "/documents" },
+  { icon: BookOpen, labelKey: "subjects", href: "/subjects" },
   { icon: MessageSquare, labelKey: "chat", href: "/chat" },
   { icon: BarChart3, labelKey: "analytics", href: "/analytics" },
   { icon: User, labelKey: "profile", href: "/profile" },
@@ -128,13 +129,15 @@ export function Sidebar() {
             <p className="text-xs text-muted-foreground mb-3">
               {t("unlockFeatures")}
             </p>
-            <motion.button
-              className="w-full py-2 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              {t("upgradeNow")}
-            </motion.button>
+            <Link href="/settings?tab=billing" onClick={() => setIsMobileOpen(false)}>
+              <motion.div
+                className="w-full py-2 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium text-center"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {t("upgradeNow")}
+              </motion.div>
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>
