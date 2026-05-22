@@ -407,16 +407,27 @@ export default function AdminPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Admin Dashboard</h1>
           <p className="text-muted-foreground mt-1">Live platform data from the connected database.</p>
         </div>
-        <motion.button
-          onClick={loadAdminData}
-          disabled={isLoading}
-          className="flex w-fit items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          whileHover={isLoading ? {} : { scale: 1.02 }}
-          whileTap={isLoading ? {} : { scale: 0.98 }}
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh Data
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-2">
+          <motion.button
+            onClick={() => setActiveTab("notifications")}
+            className="flex w-fit items-center gap-2 rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 font-medium text-foreground transition-colors hover:bg-secondary"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Bell className="w-4 h-4 text-primary" />
+            Send Notification
+          </motion.button>
+          <motion.button
+            onClick={loadAdminData}
+            disabled={isLoading}
+            className="flex w-fit items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            whileHover={isLoading ? {} : { scale: 1.02 }}
+            whileTap={isLoading ? {} : { scale: 0.98 }}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh Data
+          </motion.button>
+        </div>
       </motion.div>
 
       {error && (
@@ -461,7 +472,7 @@ export default function AdminPage() {
         {[
           { id: "users" as const, label: "User Management", icon: Users },
           { id: "documents" as const, label: "Document Moderation", icon: FileText },
-          { id: "reports" as const, label: "Reports", icon: BarChart3 },
+          { id: "reports" as const, label: "Reports & Feedback", icon: BarChart3 },
           { id: "notifications" as const, label: "Notifications", icon: Bell },
         ].map((tab) => (
           <motion.button
@@ -661,8 +672,8 @@ export default function AdminPage() {
       {activeTab === "reports" && (
         <motion.div variants={item} className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">User Reports</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Loaded from the reports table.</p>
+            <h3 className="text-lg font-semibold text-foreground">Reports & Feedback</h3>
+            <p className="mt-1 text-sm text-muted-foreground">User reports and feedback sent to admin.</p>
           </div>
           {reportsError && (
             <div className="flex items-start gap-3 rounded-xl border border-chart-4/30 bg-chart-4/10 px-4 py-3 text-sm text-chart-4">
@@ -682,6 +693,9 @@ export default function AdminPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        {report.documentTitle ? "Document report" : "User feedback"}
+                      </span>
                       <p className="font-medium text-foreground">{report.reason}</p>
                       <span className={`rounded-md border px-2 py-1 text-xs font-medium ${statusStyle(report.status)}`}>
                         {report.status}

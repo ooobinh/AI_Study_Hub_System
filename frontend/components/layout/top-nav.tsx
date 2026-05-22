@@ -1,9 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
+import type { FormEvent } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Bell, User, Command, CheckCheck, Loader2, Megaphone } from "lucide-react"
+import { Search, Bell, User, Command, CheckCheck, Loader2, Megaphone, MessageSquare, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LanguageSwitcher } from "@/components/layout/language-switcher"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -60,6 +61,12 @@ export function TopNav() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false)
   const [notificationError, setNotificationError] = useState("")
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [feedbackTitle, setFeedbackTitle] = useState("")
+  const [feedbackContent, setFeedbackContent] = useState("")
+  const [feedbackMessage, setFeedbackMessage] = useState("")
+  const [feedbackError, setFeedbackError] = useState("")
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false)
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
@@ -83,7 +90,12 @@ export function TopNav() {
       const data = await response.json() as NotificationItem[]
       setNotifications(data)
     } catch (err) {
-      setNotificationError(getNetworkErrorMessage(err))
+      const message = getNetworkErrorMessage(err)
+      setNotificationError(
+        message.includes("No static resource api/notifications")
+          ? "Notification API is not deployed on the current backend yet. Redeploy the Render backend, then refresh."
+          : message
+      )
     } finally {
       setIsLoadingNotifications(false)
     }
@@ -128,12 +140,53 @@ export function TopNav() {
     }
   }
 
+  const handleSendFeedback = async (event: FormEvent) => {
+    event.preventDefault()
+    setFeedbackMessage("")
+    setFeedbackError("")
+
+    if (!user?.id) {
+      setFeedbackError("Please log in again before sending feedback.")
+      return
+    }
+
+    if (!feedbackTitle.trim() || !feedbackContent.trim()) {
+      setFeedbackError("Title and message are required.")
+      return
+    }
+
+    setIsSendingFeedback(true)
+    try {
+      const response = await fetch(`${getApiUrl()}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: Number(user.id),
+          title: feedbackTitle.trim(),
+          content: feedbackContent.trim(),
+        }),
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not send feedback")
+      }
+      setFeedbackMessage(body?.message || "Feedback sent to admin.")
+      setFeedbackTitle("")
+      setFeedbackContent("")
+    } catch (err) {
+      setFeedbackError(getNetworkErrorMessage(err))
+    } finally {
+      setIsSendingFeedback(false)
+    }
+  }
+
   const handleLogout = () => {
     logout()
     router.replace("/login")
   }
 
   return (
+    <>
     <motion.header
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -247,6 +300,16 @@ export function TopNav() {
                 </button>
               ))}
             </div>
+            <div className="border-t border-border/50 p-2">
+              <button
+                type="button"
+                onClick={() => setIsFeedbackOpen(true)}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Send feedback to admin
+              </button>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -290,5 +353,86 @@ export function TopNav() {
         </DropdownMenu>
       </div>
     </motion.header>
+    {isFeedbackOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="glass-card w-full max-w-lg rounded-xl p-5 shadow-2xl"
+        >
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Feedback to admin</h2>
+                <p className="text-sm text-muted-foreground">Send a private message to the admin team.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFeedbackOpen(false)}
+              className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSendFeedback} className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">Title</label>
+              <input
+                value={feedbackTitle}
+                onChange={(event) => setFeedbackTitle(event.target.value)}
+                maxLength={255}
+                placeholder="I need help with my account"
+                className="w-full rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-foreground">Message</label>
+              <textarea
+                value={feedbackContent}
+                onChange={(event) => setFeedbackContent(event.target.value)}
+                rows={5}
+                placeholder="Write your message..."
+                className="min-h-32 w-full resize-y rounded-xl border border-border/50 bg-secondary/50 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            {feedbackMessage && (
+              <div className="rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-sm text-accent">
+                {feedbackMessage}
+              </div>
+            )}
+            {feedbackError && (
+              <div className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {feedbackError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFeedbackOpen(false)}
+                className="rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSendingFeedback}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Send className="h-4 w-4" />
+                {isSendingFeedback ? "Sending..." : "Send feedback"}
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
+    )}
+    </>
   )
 }
