@@ -22,6 +22,26 @@ Spring Boot REST API for the AI Study Hub prototype.
 
 By default the API runs at `http://localhost:8080`.
 
+## Render Deployment
+
+This backend is a Spring Boot service. Deploy it as Java/Maven or with the included `Dockerfile`.
+Do not deploy it as a Node service.
+
+Required production environment variables:
+
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
+- `CORS_ALLOWED_ORIGIN_PATTERNS=https://your-vercel-app.vercel.app`
+- `APP_FRONTEND_URL=https://your-vercel-app.vercel.app`
+- `GOOGLE_CLIENT_ID=...apps.googleusercontent.com`
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
+- `GEMINI_API_KEY`
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
+
+Vercel frontend also needs:
+
+- `NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com`
+- `NEXT_PUBLIC_GOOGLE_CLIENT_ID=...apps.googleusercontent.com`
+
 ## Environment
 
 ```bash

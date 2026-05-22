@@ -3,3 +3,4 @@ uploads/
 .env
 supabase-service-role*.txt
 *.log
+node_modules/

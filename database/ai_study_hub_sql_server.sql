@@ -1,442 +1,1123 @@
--- AI Study Hub - SQL Server schema
--- Development setup script. Do not run DROP DATABASE in production.
-
-IF DB_ID('AI_Study_Hub') IS NOT NULL
-BEGIN
-    ALTER DATABASE AI_Study_Hub SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE AI_Study_Hub;
-END
+CREATE TABLE [dbo].[achievements](
+	[achievement_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[code] [varchar](100) NOT NULL,
+	[title] [nvarchar](150) NOT NULL,
+	[description] [nvarchar](max) NULL,
+	[icon] [varchar](100) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[achievement_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE DATABASE AI_Study_Hub;
+/****** Object:  Table [dbo].[activity_logs]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-USE AI_Study_Hub;
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE roles (
-    role_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    role_name VARCHAR(50) NOT NULL UNIQUE,
-    description NVARCHAR(255)
-);
+CREATE TABLE [dbo].[activity_logs](
+	[activity_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[activity_type] [varchar](50) NOT NULL,
+	[entity_type] [varchar](50) NULL,
+	[entity_id] [bigint] NULL,
+	[description] [nvarchar](max) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[activity_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE users (
-    user_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    full_name NVARCHAR(100) NOT NULL,
-    email VARCHAR(150) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    avatar_url NVARCHAR(MAX),
-    phone VARCHAR(20),
-    university NVARCHAR(150),
-    major NVARCHAR(150),
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    updated_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_users_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'BANNED'))
-);
+CREATE TABLE [dbo].[ai_flashcards](
+	[flashcard_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[front_text] [nvarchar](max) NOT NULL,
+	[back_text] [nvarchar](max) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[flashcard_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE user_roles (
-    user_id BIGINT NOT NULL,
-    role_id BIGINT NOT NULL,
-    PRIMARY KEY (user_id, role_id),
-    CONSTRAINT fk_user_roles_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_user_roles_role FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE
-);
+/****** Object:  Table [dbo].[ai_quizzes]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE password_reset_tokens (
-    token_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    expired_at DATETIME2 NOT NULL,
-    used BIT DEFAULT 0,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE user_settings (
-    user_id BIGINT PRIMARY KEY,
-    theme VARCHAR(20) NOT NULL DEFAULT 'system',
-    language VARCHAR(10) NOT NULL DEFAULT 'en',
-    email_notifications BIT NOT NULL DEFAULT 1,
-    push_notifications BIT NOT NULL DEFAULT 1,
-    study_reminders BIT NOT NULL DEFAULT 1,
-    weekly_summary BIT NOT NULL DEFAULT 1,
-    updated_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_user_settings_theme CHECK (theme IN ('light', 'dark', 'system')),
-    CONSTRAINT chk_user_settings_language CHECK (language IN ('en', 'vi')),
-    CONSTRAINT fk_user_settings_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
+CREATE TABLE [dbo].[ai_quizzes](
+	[quiz_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[quiz_title] [nvarchar](255) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[quiz_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-CREATE TABLE subjects (
-    subject_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    subject_code VARCHAR(50) NOT NULL UNIQUE,
-    subject_name NVARCHAR(150) NOT NULL,
-    description NVARCHAR(MAX),
-    created_at DATETIME2 DEFAULT SYSDATETIME()
-);
+/****** Object:  Table [dbo].[ai_summaries]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE categories (
-    category_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    category_name NVARCHAR(100) NOT NULL UNIQUE,
-    description NVARCHAR(MAX),
-    created_at DATETIME2 DEFAULT SYSDATETIME()
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE documents (
-    document_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    owner_id BIGINT NOT NULL,
-    subject_id BIGINT NULL,
-    category_id BIGINT NULL,
-    title NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX),
-    original_file_name NVARCHAR(255) NOT NULL,
-    file_url NVARCHAR(MAX) NOT NULL,
-    preview_url NVARCHAR(MAX),
-    file_type VARCHAR(255),
-    file_size BIGINT,
-    page_count INT,
-    visibility VARCHAR(20) NOT NULL DEFAULT 'PRIVATE',
-    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-    download_count INT DEFAULT 0,
-    view_count INT DEFAULT 0,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    updated_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_documents_visibility CHECK (visibility IN ('PRIVATE', 'PUBLIC', 'SHARED')),
-    CONSTRAINT chk_documents_status CHECK (status IN ('ACTIVE', 'DELETED', 'PENDING_REVIEW', 'REJECTED')),
-    CONSTRAINT fk_document_owner FOREIGN KEY (owner_id) REFERENCES users(user_id) ON DELETE NO ACTION,
-    CONSTRAINT fk_document_subject FOREIGN KEY (subject_id) REFERENCES subjects(subject_id) ON DELETE NO ACTION,
-    CONSTRAINT fk_document_category FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE NO ACTION
-);
+CREATE TABLE [dbo].[ai_summaries](
+	[summary_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[summary_text] [nvarchar](max) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[summary_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE document_tags (
-    tag_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    tag_name NVARCHAR(100) NOT NULL UNIQUE
-);
+/****** Object:  Table [dbo].[categories]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE document_tag_mapping (
-    document_id BIGINT NOT NULL,
-    tag_id BIGINT NOT NULL,
-    PRIMARY KEY (document_id, tag_id),
-    CONSTRAINT fk_doc_tag_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_doc_tag_tag FOREIGN KEY (tag_id) REFERENCES document_tags(tag_id) ON DELETE CASCADE
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE document_favorites (
-    user_id BIGINT NOT NULL,
-    document_id BIGINT NOT NULL,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    PRIMARY KEY (user_id, document_id),
-    CONSTRAINT fk_fav_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_fav_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE NO ACTION
-);
+CREATE TABLE [dbo].[categories](
+	[category_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[category_name] [nvarchar](100) NOT NULL,
+	[description] [nvarchar](max) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[category_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE document_shares (
-    share_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    shared_by BIGINT NOT NULL,
-    shared_with BIGINT NULL,
-    share_token VARCHAR(255) UNIQUE,
-    permission VARCHAR(20) NOT NULL DEFAULT 'VIEW',
-    expired_at DATETIME2,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_share_permission CHECK (permission IN ('VIEW', 'DOWNLOAD', 'EDIT')),
-    CONSTRAINT fk_share_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_share_by FOREIGN KEY (shared_by) REFERENCES users(user_id) ON DELETE NO ACTION,
-    CONSTRAINT fk_share_with FOREIGN KEY (shared_with) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[chat_messages]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE document_contents (
-    content_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL UNIQUE,
-    extracted_text NVARCHAR(MAX),
-    extraction_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    extracted_at DATETIME2,
-    CONSTRAINT chk_extraction_status CHECK (extraction_status IN ('PENDING', 'SUCCESS', 'FAILED')),
-    CONSTRAINT fk_content_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE document_chunks (
-    chunk_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    chunk_index INT NOT NULL,
-    chunk_text NVARCHAR(MAX) NOT NULL,
-    embedding_vector NVARCHAR(MAX),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT uq_document_chunk UNIQUE (document_id, chunk_index),
-    CONSTRAINT fk_chunk_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE
-);
+CREATE TABLE [dbo].[chat_messages](
+	[message_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[session_id] [bigint] NOT NULL,
+	[sender] [varchar](10) NOT NULL,
+	[message_text] [nvarchar](max) NOT NULL,
+	[ai_model] [varchar](100) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[message_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE upload_logs (
-    upload_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    document_id BIGINT NULL,
-    file_name NVARCHAR(255) NOT NULL,
-    storage_provider VARCHAR(20) NOT NULL DEFAULT 'SUPABASE',
-    upload_status VARCHAR(20) NOT NULL DEFAULT 'UPLOADING',
-    error_message NVARCHAR(MAX),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_storage_provider CHECK (storage_provider IN ('SUPABASE', 'LOCAL', 'S3')),
-    CONSTRAINT chk_upload_status CHECK (upload_status IN ('UPLOADING', 'SUCCESS', 'FAILED')),
-    CONSTRAINT fk_upload_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
-    CONSTRAINT fk_upload_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[chat_sessions]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE chat_sessions (
-    session_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    document_id BIGINT NULL,
-    session_title NVARCHAR(255),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    updated_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_chat_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_chat_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE NO ACTION
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE chat_messages (
-    message_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    session_id BIGINT NOT NULL,
-    sender VARCHAR(10) NOT NULL,
-    message_text NVARCHAR(MAX) NOT NULL,
-    ai_model VARCHAR(100),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_message_sender CHECK (sender IN ('USER', 'AI')),
-    CONSTRAINT fk_message_session FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE
-);
+CREATE TABLE [dbo].[chat_sessions](
+	[session_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[document_id] [bigint] NULL,
+	[session_title] [nvarchar](255) NULL,
+	[created_at] [datetime2](7) NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[session_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-CREATE TABLE ai_summaries (
-    summary_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    summary_text NVARCHAR(MAX) NOT NULL,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_summary_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_summary_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[comments]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE ai_quizzes (
-    quiz_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    quiz_title NVARCHAR(255),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_quiz_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_quiz_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE quiz_questions (
-    question_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    quiz_id BIGINT NOT NULL,
-    question_text NVARCHAR(MAX) NOT NULL,
-    option_a NVARCHAR(MAX),
-    option_b NVARCHAR(MAX),
-    option_c NVARCHAR(MAX),
-    option_d NVARCHAR(MAX),
-    correct_answer VARCHAR(1),
-    explanation NVARCHAR(MAX),
-    CONSTRAINT chk_correct_answer CHECK (correct_answer IN ('A', 'B', 'C', 'D')),
-    CONSTRAINT fk_question_quiz FOREIGN KEY (quiz_id) REFERENCES ai_quizzes(quiz_id) ON DELETE CASCADE
-);
+CREATE TABLE [dbo].[comments](
+	[comment_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[content] [nvarchar](max) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[comment_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE quiz_attempts (
-    attempt_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    quiz_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    score DECIMAL(5,2),
-    total_questions INT,
-    correct_count INT,
-    completed_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_attempt_quiz FOREIGN KEY (quiz_id) REFERENCES ai_quizzes(quiz_id) ON DELETE CASCADE,
-    CONSTRAINT fk_attempt_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[document_chunks]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE ai_flashcards (
-    flashcard_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    front_text NVARCHAR(MAX) NOT NULL,
-    back_text NVARCHAR(MAX) NOT NULL,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_flashcard_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_flashcard_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE flashcard_reviews (
-    review_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    flashcard_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    rating INT NOT NULL,
-    reviewed_at DATETIME2 DEFAULT SYSDATETIME(),
-    next_review_at DATETIME2,
-    CONSTRAINT chk_flashcard_review_rating CHECK (rating BETWEEN 1 AND 5),
-    CONSTRAINT fk_review_flashcard FOREIGN KEY (flashcard_id) REFERENCES ai_flashcards(flashcard_id) ON DELETE CASCADE,
-    CONSTRAINT fk_review_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+CREATE TABLE [dbo].[document_chunks](
+	[chunk_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[chunk_index] [int] NOT NULL,
+	[chunk_text] [nvarchar](max) NOT NULL,
+	[embedding_vector] [nvarchar](max) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[chunk_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE comments (
-    comment_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    content NVARCHAR(MAX) NOT NULL,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    updated_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_comment_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_comment_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[document_contents]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE reports (
-    report_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NULL,
-    reported_by BIGINT NOT NULL,
-    reason NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX),
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT chk_report_status CHECK (status IN ('PENDING', 'RESOLVED', 'REJECTED')),
-    CONSTRAINT fk_report_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE NO ACTION,
-    CONSTRAINT fk_report_user FOREIGN KEY (reported_by) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE notifications (
-    notification_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    title NVARCHAR(255) NOT NULL,
-    content NVARCHAR(MAX),
-    is_read BIT DEFAULT 0,
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
+CREATE TABLE [dbo].[document_contents](
+	[content_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[extracted_text] [nvarchar](max) NULL,
+	[extraction_status] [varchar](20) NOT NULL,
+	[extracted_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[content_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 GO
-
-CREATE TABLE activity_logs (
-    log_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NULL,
-    action VARCHAR(100) NOT NULL,
-    target_type VARCHAR(100),
-    target_id BIGINT,
-    ip_address VARCHAR(100),
-    created_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_activity_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+/****** Object:  Table [dbo].[document_favorites]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE study_sessions (
-    study_session_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    subject_id BIGINT NULL,
-    started_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    ended_at DATETIME2,
-    duration_minutes INT,
-    notes NVARCHAR(MAX),
-    CONSTRAINT fk_study_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_study_subject FOREIGN KEY (subject_id) REFERENCES subjects(subject_id) ON DELETE NO ACTION
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE document_views (
-    view_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    document_id BIGINT NOT NULL,
-    user_id BIGINT NULL,
-    viewed_at DATETIME2 DEFAULT SYSDATETIME(),
-    CONSTRAINT fk_view_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-    CONSTRAINT fk_view_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION
-);
+CREATE TABLE [dbo].[document_favorites](
+	[user_id] [bigint] NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC,
+	[document_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-CREATE TABLE achievements (
-    achievement_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    code VARCHAR(80) NOT NULL UNIQUE,
-    title NVARCHAR(120) NOT NULL,
-    description NVARCHAR(255),
-    icon VARCHAR(80),
-    created_at DATETIME2 DEFAULT SYSDATETIME()
-);
+/****** Object:  Table [dbo].[document_shares]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE user_achievements (
-    user_id BIGINT NOT NULL,
-    achievement_id BIGINT NOT NULL,
-    earned_at DATETIME2 DEFAULT SYSDATETIME(),
-    PRIMARY KEY (user_id, achievement_id),
-    CONSTRAINT fk_user_achievement_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_user_achievement FOREIGN KEY (achievement_id) REFERENCES achievements(achievement_id) ON DELETE CASCADE
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_documents_title ON documents(title);
-CREATE INDEX idx_documents_owner ON documents(owner_id);
-CREATE INDEX idx_documents_subject ON documents(subject_id);
-CREATE INDEX idx_documents_visibility ON documents(visibility);
-CREATE INDEX idx_documents_status ON documents(status);
-CREATE INDEX idx_chat_sessions_user ON chat_sessions(user_id);
-CREATE INDEX idx_activity_user ON activity_logs(user_id);
-CREATE INDEX idx_document_chunks_document ON document_chunks(document_id);
+CREATE TABLE [dbo].[document_shares](
+	[share_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[shared_by] [bigint] NOT NULL,
+	[shared_with] [bigint] NULL,
+	[share_token] [varchar](255) NULL,
+	[permission] [varchar](20) NOT NULL,
+	[expired_at] [datetime2](7) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[share_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-INSERT INTO roles (role_name, description) VALUES
-('GUEST', N'Guest user with limited access'),
-('USER', N'Normal student user'),
-('ADMIN', N'System administrator');
+/****** Object:  Table [dbo].[document_tag_mapping]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-INSERT INTO users (full_name, email, password_hash, university, major, status) VALUES
-(N'Nguyen Trong Binh', 'binh@example.com', '$2a$10$00PbLTGtsq.n2XP/m/ksyezr66pJplh4ATjVDYM5O51QXMy8bPfeS', N'FPT University', N'Software Engineering', 'ACTIVE'),
-(N'Admin User', 'admin@example.com', '$2a$10$.yOBCrr.X8SUicyOdvYvOu15yKu/BHYFlQMXRZgDViDxuprxCYZxa', N'FPT University', N'Software Engineering', 'ACTIVE');
+SET QUOTED_IDENTIFIER ON
 GO
-
-INSERT INTO user_roles (user_id, role_id) VALUES (1, 2), (2, 3);
-INSERT INTO user_settings (user_id, theme, language) VALUES (1, 'system', 'en'), (2, 'dark', 'en');
+CREATE TABLE [dbo].[document_tag_mapping](
+	[document_id] [bigint] NOT NULL,
+	[tag_id] [bigint] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[document_id] ASC,
+	[tag_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-INSERT INTO subjects (subject_code, subject_name, description) VALUES
-('PRJ301', N'Java Web Application Development', N'Java Servlet, JSP, MVC, JDBC'),
-('SWT301', N'Software Testing', N'Testing process, validation, verification'),
-('CSD201', N'Data Structures and Algorithms', N'Linked List, Stack, Queue, Tree'),
-('DBI202', N'Database Systems', N'SQL, ERD, relational database');
+/****** Object:  Table [dbo].[document_tags]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
-
-INSERT INTO categories (category_name, description) VALUES
-(N'Lecture Slide', N'Lecture slide documents'),
-(N'Assignment', N'Assignment documents'),
-(N'Exam Review', N'Exam preparation materials'),
-(N'Book', N'Textbooks and reference books'),
-(N'Note', N'Student notes');
+SET QUOTED_IDENTIFIER ON
 GO
-
-INSERT INTO document_tags (tag_name) VALUES
-(N'Java'), (N'Spring Boot'), (N'SQL Server'), (N'AI'), (N'Testing'), (N'Database');
+CREATE TABLE [dbo].[document_tags](
+	[tag_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[tag_name] [nvarchar](100) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[tag_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 GO
-
-INSERT INTO achievements (code, title, description, icon) VALUES
-('EARLY_ADOPTER', N'Early Adopter', N'Joined the platform early', 'Zap'),
-('KNOWLEDGE_SEEKER', N'Knowledge Seeker', N'Uploaded study documents', 'BookOpen'),
-('AI_EXPLORER', N'AI Explorer', N'Used AI study assistant', 'MessageSquare');
+/****** Object:  Table [dbo].[document_views]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
 GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[document_views](
+	[view_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NOT NULL,
+	[user_id] [bigint] NULL,
+	[viewed_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[view_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[documents]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[documents](
+	[document_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[owner_id] [bigint] NOT NULL,
+	[subject_id] [bigint] NULL,
+	[category_id] [bigint] NULL,
+	[title] [nvarchar](255) NOT NULL,
+	[description] [nvarchar](max) NULL,
+	[original_file_name] [nvarchar](255) NOT NULL,
+	[file_url] [nvarchar](max) NOT NULL,
+	[preview_url] [nvarchar](max) NULL,
+	[file_type] [varchar](255) NULL,
+	[file_size] [bigint] NULL,
+	[page_count] [int] NULL,
+	[visibility] [varchar](20) NOT NULL,
+	[status] [varchar](30) NOT NULL,
+	[download_count] [int] NULL,
+	[view_count] [int] NULL,
+	[created_at] [datetime2](7) NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[document_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[flashcard_reviews]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[flashcard_reviews](
+	[review_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[flashcard_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[rating] [int] NOT NULL,
+	[reviewed_at] [datetime2](7) NULL,
+	[next_review_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[review_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[notifications]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[notifications](
+	[notification_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[title] [nvarchar](255) NOT NULL,
+	[content] [nvarchar](max) NULL,
+	[is_read] [bit] NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[notification_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[password_reset_tokens]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[password_reset_tokens](
+	[token_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[token] [varchar](255) NOT NULL,
+	[expired_at] [datetime2](7) NOT NULL,
+	[used] [bit] NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[token_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[quiz_attempts]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[quiz_attempts](
+	[attempt_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[quiz_id] [bigint] NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[score] [decimal](5, 2) NULL,
+	[total_questions] [int] NULL,
+	[correct_count] [int] NULL,
+	[completed_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[attempt_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[quiz_questions]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[quiz_questions](
+	[question_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[quiz_id] [bigint] NOT NULL,
+	[question_text] [nvarchar](max) NOT NULL,
+	[option_a] [nvarchar](max) NULL,
+	[option_b] [nvarchar](max) NULL,
+	[option_c] [nvarchar](max) NULL,
+	[option_d] [nvarchar](max) NULL,
+	[correct_answer] [varchar](1) NULL,
+	[explanation] [nvarchar](max) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[question_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[reports]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[reports](
+	[report_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[document_id] [bigint] NULL,
+	[reported_by] [bigint] NOT NULL,
+	[reason] [nvarchar](255) NOT NULL,
+	[description] [nvarchar](max) NULL,
+	[status] [varchar](20) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[report_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[roles]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[roles](
+	[role_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[role_name] [varchar](50) NOT NULL,
+	[description] [nvarchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[role_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[study_sessions]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[study_sessions](
+	[study_session_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[subject_id] [bigint] NULL,
+	[started_at] [datetime2](7) NOT NULL,
+	[ended_at] [datetime2](7) NULL,
+	[duration_minutes] [int] NULL,
+	[notes] [nvarchar](max) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[study_session_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[subjects]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[subjects](
+	[subject_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[subject_code] [varchar](50) NOT NULL,
+	[subject_name] [nvarchar](150) NOT NULL,
+	[description] [nvarchar](max) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[subject_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[upload_logs]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[upload_logs](
+	[upload_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[document_id] [bigint] NULL,
+	[file_name] [nvarchar](255) NOT NULL,
+	[storage_provider] [varchar](20) NOT NULL,
+	[upload_status] [varchar](20) NOT NULL,
+	[error_message] [nvarchar](max) NULL,
+	[created_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[upload_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[user_achievements]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[user_achievements](
+	[user_id] [bigint] NOT NULL,
+	[achievement_id] [bigint] NOT NULL,
+	[earned_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC,
+	[achievement_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[user_roles]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[user_roles](
+	[user_id] [bigint] NOT NULL,
+	[role_id] [bigint] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC,
+	[role_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[user_settings]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[user_settings](
+	[user_id] [bigint] NOT NULL,
+	[theme] [varchar](20) NOT NULL,
+	[language] [varchar](10) NOT NULL,
+	[email_notifications] [bit] NOT NULL,
+	[push_notifications] [bit] NOT NULL,
+	[study_reminders] [bit] NOT NULL,
+	[weekly_summary] [bit] NOT NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[users]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[users](
+	[user_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[full_name] [nvarchar](100) NOT NULL,
+	[email] [varchar](150) NOT NULL,
+	[password_hash] [varchar](255) NOT NULL,
+	[avatar_url] [nvarchar](max) NULL,
+	[phone] [varchar](20) NULL,
+	[university] [nvarchar](150) NULL,
+	[major] [nvarchar](150) NULL,
+	[status] [varchar](20) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+SET IDENTITY_INSERT [dbo].[achievements] ON 
 
-INSERT INTO user_achievements (user_id, achievement_id) VALUES (1, 1), (1, 2), (1, 3);
+INSERT [dbo].[achievements] ([achievement_id], [code], [title], [description], [icon], [created_at]) VALUES (1, N'EARLY_ADOPTER', N'Early Adopter', N'Joined the platform early', N'Zap', CAST(N'2026-05-20T22:34:56.8066877' AS DateTime2))
+INSERT [dbo].[achievements] ([achievement_id], [code], [title], [description], [icon], [created_at]) VALUES (2, N'KNOWLEDGE_SEEKER', N'Knowledge Seeker', N'Uploaded study documents', N'BookOpen', CAST(N'2026-05-20T22:34:56.8066877' AS DateTime2))
+INSERT [dbo].[achievements] ([achievement_id], [code], [title], [description], [icon], [created_at]) VALUES (3, N'AI_EXPLORER', N'AI Explorer', N'Used AI study assistant', N'MessageSquare', CAST(N'2026-05-20T22:34:56.8066877' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[achievements] OFF
+GO
+SET IDENTITY_INSERT [dbo].[categories] ON 
+
+INSERT [dbo].[categories] ([category_id], [category_name], [description], [created_at]) VALUES (1, N'Lecture Slide', N'Lecture slide documents', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[categories] ([category_id], [category_name], [description], [created_at]) VALUES (2, N'Assignment', N'Assignment documents', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[categories] ([category_id], [category_name], [description], [created_at]) VALUES (3, N'Exam Review', N'Exam preparation materials', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[categories] ([category_id], [category_name], [description], [created_at]) VALUES (4, N'Book', N'Textbooks and reference books', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[categories] ([category_id], [category_name], [description], [created_at]) VALUES (5, N'Note', N'Student notes', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[categories] OFF
+GO
+SET IDENTITY_INSERT [dbo].[document_tags] ON 
+
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (4, N'AI')
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (6, N'Database')
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (1, N'Java')
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (2, N'Spring Boot')
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (3, N'SQL Server')
+INSERT [dbo].[document_tags] ([tag_id], [tag_name]) VALUES (5, N'Testing')
+SET IDENTITY_INSERT [dbo].[document_tags] OFF
+GO
+SET IDENTITY_INSERT [dbo].[roles] ON 
+
+INSERT [dbo].[roles] ([role_id], [role_name], [description]) VALUES (1, N'GUEST', N'Guest user with limited access')
+INSERT [dbo].[roles] ([role_id], [role_name], [description]) VALUES (2, N'USER', N'Normal student user')
+INSERT [dbo].[roles] ([role_id], [role_name], [description]) VALUES (3, N'ADMIN', N'System administrator')
+SET IDENTITY_INSERT [dbo].[roles] OFF
+GO
+SET IDENTITY_INSERT [dbo].[subjects] ON 
+
+INSERT [dbo].[subjects] ([subject_id], [subject_code], [subject_name], [description], [created_at]) VALUES (1, N'PRJ301', N'Java Web Application Development', N'Java Servlet, JSP, MVC, JDBC', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[subjects] ([subject_id], [subject_code], [subject_name], [description], [created_at]) VALUES (2, N'SWT301', N'Software Testing', N'Testing process, validation, verification', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[subjects] ([subject_id], [subject_code], [subject_name], [description], [created_at]) VALUES (3, N'CSD201', N'Data Structures and Algorithms', N'Linked List, Stack, Queue, Tree', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+INSERT [dbo].[subjects] ([subject_id], [subject_code], [subject_name], [description], [created_at]) VALUES (4, N'DBI202', N'Database Systems', N'SQL, ERD, relational database', CAST(N'2026-05-20T22:34:56.7749505' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[subjects] OFF
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__achievem__357D4CF9D7EEB03C]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[achievements] ADD UNIQUE NONCLUSTERED 
+(
+	[code] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [idx_activity_user]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_activity_user] ON [dbo].[activity_logs]
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__categori__5189E255207D294D]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[categories] ADD UNIQUE NONCLUSTERED 
+(
+	[category_name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [idx_chat_sessions_user]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_chat_sessions_user] ON [dbo].[chat_sessions]
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [uq_document_chunk]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[document_chunks] ADD  CONSTRAINT [uq_document_chunk] UNIQUE NONCLUSTERED 
+(
+	[document_id] ASC,
+	[chunk_index] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [idx_document_chunks_document]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_document_chunks_document] ON [dbo].[document_chunks]
+(
+	[document_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [UQ__document__9666E8AD4AD0C91F]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[document_contents] ADD UNIQUE NONCLUSTERED 
+(
+	[document_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__document__C79E80F42B049B47]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[document_shares] ADD UNIQUE NONCLUSTERED 
+(
+	[share_token] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__document__E298655C7F722EC7]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[document_tags] ADD UNIQUE NONCLUSTERED 
+(
+	[tag_name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [idx_documents_owner]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_documents_owner] ON [dbo].[documents]
+(
+	[owner_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [idx_documents_status]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_documents_status] ON [dbo].[documents]
+(
+	[status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [idx_documents_subject]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_documents_subject] ON [dbo].[documents]
+(
+	[subject_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [idx_documents_title]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_documents_title] ON [dbo].[documents]
+(
+	[title] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [idx_documents_visibility]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_documents_visibility] ON [dbo].[documents]
+(
+	[visibility] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__password__CA90DA7AA75E45C9]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[password_reset_tokens] ADD UNIQUE NONCLUSTERED 
+(
+	[token] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__roles__783254B13C3A6D6B]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[roles] ADD UNIQUE NONCLUSTERED 
+(
+	[role_name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__subjects__CEACD920547C9F98]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[subjects] ADD UNIQUE NONCLUSTERED 
+(
+	[subject_code] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [UQ__users__AB6E61644106EF27]    Script Date: 21/05/2026 11:29:47 CH ******/
+ALTER TABLE [dbo].[users] ADD UNIQUE NONCLUSTERED 
+(
+	[email] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [idx_users_email]    Script Date: 21/05/2026 11:29:47 CH ******/
+CREATE NONCLUSTERED INDEX [idx_users_email] ON [dbo].[users]
+(
+	[email] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[achievements] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[activity_logs] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[ai_flashcards] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[ai_quizzes] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[ai_summaries] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[categories] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[chat_messages] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[chat_sessions] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[chat_sessions] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[comments] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[comments] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[document_chunks] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[document_contents] ADD  DEFAULT ('PENDING') FOR [extraction_status]
+GO
+ALTER TABLE [dbo].[document_favorites] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[document_shares] ADD  DEFAULT ('VIEW') FOR [permission]
+GO
+ALTER TABLE [dbo].[document_shares] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[document_views] ADD  DEFAULT (sysdatetime()) FOR [viewed_at]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT ('PRIVATE') FOR [visibility]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT ('ACTIVE') FOR [status]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT ((0)) FOR [download_count]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT ((0)) FOR [view_count]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[documents] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[flashcard_reviews] ADD  DEFAULT (sysdatetime()) FOR [reviewed_at]
+GO
+ALTER TABLE [dbo].[notifications] ADD  DEFAULT ((0)) FOR [is_read]
+GO
+ALTER TABLE [dbo].[notifications] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[password_reset_tokens] ADD  DEFAULT ((0)) FOR [used]
+GO
+ALTER TABLE [dbo].[password_reset_tokens] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[quiz_attempts] ADD  DEFAULT (sysdatetime()) FOR [completed_at]
+GO
+ALTER TABLE [dbo].[reports] ADD  DEFAULT ('PENDING') FOR [status]
+GO
+ALTER TABLE [dbo].[reports] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[study_sessions] ADD  DEFAULT (sysdatetime()) FOR [started_at]
+GO
+ALTER TABLE [dbo].[subjects] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[upload_logs] ADD  CONSTRAINT [DF_upload_logs_storage_provider]  DEFAULT ('SUPABASE') FOR [storage_provider]
+GO
+ALTER TABLE [dbo].[upload_logs] ADD  DEFAULT ('UPLOADING') FOR [upload_status]
+GO
+ALTER TABLE [dbo].[upload_logs] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[user_achievements] ADD  DEFAULT (sysdatetime()) FOR [earned_at]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ('system') FOR [theme]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ('en') FOR [language]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ((1)) FOR [email_notifications]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ((1)) FOR [push_notifications]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ((1)) FOR [study_reminders]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT ((1)) FOR [weekly_summary]
+GO
+ALTER TABLE [dbo].[user_settings] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[users] ADD  DEFAULT ('ACTIVE') FOR [status]
+GO
+ALTER TABLE [dbo].[users] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[users] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[activity_logs]  WITH CHECK ADD  CONSTRAINT [fk_activity_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[activity_logs] CHECK CONSTRAINT [fk_activity_user]
+GO
+ALTER TABLE [dbo].[ai_flashcards]  WITH CHECK ADD  CONSTRAINT [fk_flashcard_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[ai_flashcards] CHECK CONSTRAINT [fk_flashcard_document]
+GO
+ALTER TABLE [dbo].[ai_flashcards]  WITH CHECK ADD  CONSTRAINT [fk_flashcard_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[ai_flashcards] CHECK CONSTRAINT [fk_flashcard_user]
+GO
+ALTER TABLE [dbo].[ai_quizzes]  WITH CHECK ADD  CONSTRAINT [fk_quiz_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[ai_quizzes] CHECK CONSTRAINT [fk_quiz_document]
+GO
+ALTER TABLE [dbo].[ai_quizzes]  WITH CHECK ADD  CONSTRAINT [fk_quiz_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[ai_quizzes] CHECK CONSTRAINT [fk_quiz_user]
+GO
+ALTER TABLE [dbo].[ai_summaries]  WITH CHECK ADD  CONSTRAINT [fk_summary_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[ai_summaries] CHECK CONSTRAINT [fk_summary_document]
+GO
+ALTER TABLE [dbo].[ai_summaries]  WITH CHECK ADD  CONSTRAINT [fk_summary_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[ai_summaries] CHECK CONSTRAINT [fk_summary_user]
+GO
+ALTER TABLE [dbo].[chat_messages]  WITH CHECK ADD  CONSTRAINT [fk_message_session] FOREIGN KEY([session_id])
+REFERENCES [dbo].[chat_sessions] ([session_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[chat_messages] CHECK CONSTRAINT [fk_message_session]
+GO
+ALTER TABLE [dbo].[chat_sessions]  WITH CHECK ADD  CONSTRAINT [fk_chat_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+GO
+ALTER TABLE [dbo].[chat_sessions] CHECK CONSTRAINT [fk_chat_document]
+GO
+ALTER TABLE [dbo].[chat_sessions]  WITH CHECK ADD  CONSTRAINT [fk_chat_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[chat_sessions] CHECK CONSTRAINT [fk_chat_user]
+GO
+ALTER TABLE [dbo].[comments]  WITH CHECK ADD  CONSTRAINT [fk_comment_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[comments] CHECK CONSTRAINT [fk_comment_document]
+GO
+ALTER TABLE [dbo].[comments]  WITH CHECK ADD  CONSTRAINT [fk_comment_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[comments] CHECK CONSTRAINT [fk_comment_user]
+GO
+ALTER TABLE [dbo].[document_chunks]  WITH CHECK ADD  CONSTRAINT [fk_chunk_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_chunks] CHECK CONSTRAINT [fk_chunk_document]
+GO
+ALTER TABLE [dbo].[document_contents]  WITH CHECK ADD  CONSTRAINT [fk_content_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_contents] CHECK CONSTRAINT [fk_content_document]
+GO
+ALTER TABLE [dbo].[document_favorites]  WITH CHECK ADD  CONSTRAINT [fk_fav_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+GO
+ALTER TABLE [dbo].[document_favorites] CHECK CONSTRAINT [fk_fav_document]
+GO
+ALTER TABLE [dbo].[document_favorites]  WITH CHECK ADD  CONSTRAINT [fk_fav_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_favorites] CHECK CONSTRAINT [fk_fav_user]
+GO
+ALTER TABLE [dbo].[document_shares]  WITH CHECK ADD  CONSTRAINT [fk_share_by] FOREIGN KEY([shared_by])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[document_shares] CHECK CONSTRAINT [fk_share_by]
+GO
+ALTER TABLE [dbo].[document_shares]  WITH CHECK ADD  CONSTRAINT [fk_share_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_shares] CHECK CONSTRAINT [fk_share_document]
+GO
+ALTER TABLE [dbo].[document_shares]  WITH CHECK ADD  CONSTRAINT [fk_share_with] FOREIGN KEY([shared_with])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[document_shares] CHECK CONSTRAINT [fk_share_with]
+GO
+ALTER TABLE [dbo].[document_tag_mapping]  WITH CHECK ADD  CONSTRAINT [fk_doc_tag_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_tag_mapping] CHECK CONSTRAINT [fk_doc_tag_document]
+GO
+ALTER TABLE [dbo].[document_tag_mapping]  WITH CHECK ADD  CONSTRAINT [fk_doc_tag_tag] FOREIGN KEY([tag_id])
+REFERENCES [dbo].[document_tags] ([tag_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_tag_mapping] CHECK CONSTRAINT [fk_doc_tag_tag]
+GO
+ALTER TABLE [dbo].[document_views]  WITH CHECK ADD  CONSTRAINT [fk_view_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[document_views] CHECK CONSTRAINT [fk_view_document]
+GO
+ALTER TABLE [dbo].[document_views]  WITH CHECK ADD  CONSTRAINT [fk_view_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[document_views] CHECK CONSTRAINT [fk_view_user]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_category] FOREIGN KEY([category_id])
+REFERENCES [dbo].[categories] ([category_id])
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [fk_document_category]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_owner] FOREIGN KEY([owner_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [fk_document_owner]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_subject] FOREIGN KEY([subject_id])
+REFERENCES [dbo].[subjects] ([subject_id])
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [fk_document_subject]
+GO
+ALTER TABLE [dbo].[flashcard_reviews]  WITH CHECK ADD  CONSTRAINT [fk_review_flashcard] FOREIGN KEY([flashcard_id])
+REFERENCES [dbo].[ai_flashcards] ([flashcard_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[flashcard_reviews] CHECK CONSTRAINT [fk_review_flashcard]
+GO
+ALTER TABLE [dbo].[flashcard_reviews]  WITH CHECK ADD  CONSTRAINT [fk_review_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[flashcard_reviews] CHECK CONSTRAINT [fk_review_user]
+GO
+ALTER TABLE [dbo].[notifications]  WITH CHECK ADD  CONSTRAINT [fk_notification_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[notifications] CHECK CONSTRAINT [fk_notification_user]
+GO
+ALTER TABLE [dbo].[password_reset_tokens]  WITH CHECK ADD  CONSTRAINT [fk_reset_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[password_reset_tokens] CHECK CONSTRAINT [fk_reset_user]
+GO
+ALTER TABLE [dbo].[quiz_attempts]  WITH CHECK ADD  CONSTRAINT [fk_attempt_quiz] FOREIGN KEY([quiz_id])
+REFERENCES [dbo].[ai_quizzes] ([quiz_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[quiz_attempts] CHECK CONSTRAINT [fk_attempt_quiz]
+GO
+ALTER TABLE [dbo].[quiz_attempts]  WITH CHECK ADD  CONSTRAINT [fk_attempt_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[quiz_attempts] CHECK CONSTRAINT [fk_attempt_user]
+GO
+ALTER TABLE [dbo].[quiz_questions]  WITH CHECK ADD  CONSTRAINT [fk_question_quiz] FOREIGN KEY([quiz_id])
+REFERENCES [dbo].[ai_quizzes] ([quiz_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[quiz_questions] CHECK CONSTRAINT [fk_question_quiz]
+GO
+ALTER TABLE [dbo].[reports]  WITH CHECK ADD  CONSTRAINT [fk_report_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+GO
+ALTER TABLE [dbo].[reports] CHECK CONSTRAINT [fk_report_document]
+GO
+ALTER TABLE [dbo].[reports]  WITH CHECK ADD  CONSTRAINT [fk_report_user] FOREIGN KEY([reported_by])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[reports] CHECK CONSTRAINT [fk_report_user]
+GO
+ALTER TABLE [dbo].[study_sessions]  WITH CHECK ADD  CONSTRAINT [fk_study_subject] FOREIGN KEY([subject_id])
+REFERENCES [dbo].[subjects] ([subject_id])
+GO
+ALTER TABLE [dbo].[study_sessions] CHECK CONSTRAINT [fk_study_subject]
+GO
+ALTER TABLE [dbo].[study_sessions]  WITH CHECK ADD  CONSTRAINT [fk_study_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[study_sessions] CHECK CONSTRAINT [fk_study_user]
+GO
+ALTER TABLE [dbo].[upload_logs]  WITH CHECK ADD  CONSTRAINT [fk_upload_document] FOREIGN KEY([document_id])
+REFERENCES [dbo].[documents] ([document_id])
+GO
+ALTER TABLE [dbo].[upload_logs] CHECK CONSTRAINT [fk_upload_document]
+GO
+ALTER TABLE [dbo].[upload_logs]  WITH CHECK ADD  CONSTRAINT [fk_upload_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[upload_logs] CHECK CONSTRAINT [fk_upload_user]
+GO
+ALTER TABLE [dbo].[user_achievements]  WITH CHECK ADD  CONSTRAINT [fk_user_achievement] FOREIGN KEY([achievement_id])
+REFERENCES [dbo].[achievements] ([achievement_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[user_achievements] CHECK CONSTRAINT [fk_user_achievement]
+GO
+ALTER TABLE [dbo].[user_achievements]  WITH CHECK ADD  CONSTRAINT [fk_user_achievement_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[user_achievements] CHECK CONSTRAINT [fk_user_achievement_user]
+GO
+ALTER TABLE [dbo].[user_roles]  WITH CHECK ADD  CONSTRAINT [fk_user_roles_role] FOREIGN KEY([role_id])
+REFERENCES [dbo].[roles] ([role_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[user_roles] CHECK CONSTRAINT [fk_user_roles_role]
+GO
+ALTER TABLE [dbo].[user_roles]  WITH CHECK ADD  CONSTRAINT [fk_user_roles_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[user_roles] CHECK CONSTRAINT [fk_user_roles_user]
+GO
+ALTER TABLE [dbo].[user_settings]  WITH CHECK ADD  CONSTRAINT [fk_user_settings_user] FOREIGN KEY([user_id])
+REFERENCES [dbo].[users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[user_settings] CHECK CONSTRAINT [fk_user_settings_user]
+GO
+ALTER TABLE [dbo].[chat_messages]  WITH CHECK ADD  CONSTRAINT [chk_message_sender] CHECK  (([sender]='AI' OR [sender]='USER'))
+GO
+ALTER TABLE [dbo].[chat_messages] CHECK CONSTRAINT [chk_message_sender]
+GO
+ALTER TABLE [dbo].[document_contents]  WITH CHECK ADD  CONSTRAINT [chk_extraction_status] CHECK  (([extraction_status]='FAILED' OR [extraction_status]='SUCCESS' OR [extraction_status]='PENDING'))
+GO
+ALTER TABLE [dbo].[document_contents] CHECK CONSTRAINT [chk_extraction_status]
+GO
+ALTER TABLE [dbo].[document_shares]  WITH CHECK ADD  CONSTRAINT [chk_share_permission] CHECK  (([permission]='EDIT' OR [permission]='DOWNLOAD' OR [permission]='VIEW'))
+GO
+ALTER TABLE [dbo].[document_shares] CHECK CONSTRAINT [chk_share_permission]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [chk_documents_status] CHECK  (([status]='REJECTED' OR [status]='PENDING_REVIEW' OR [status]='DELETED' OR [status]='ACTIVE'))
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [chk_documents_status]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [chk_documents_visibility] CHECK  (([visibility]='SHARED' OR [visibility]='PUBLIC' OR [visibility]='PRIVATE'))
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [chk_documents_visibility]
+GO
+ALTER TABLE [dbo].[flashcard_reviews]  WITH CHECK ADD  CONSTRAINT [chk_flashcard_review_rating] CHECK  (([rating]>=(1) AND [rating]<=(5)))
+GO
+ALTER TABLE [dbo].[flashcard_reviews] CHECK CONSTRAINT [chk_flashcard_review_rating]
+GO
+ALTER TABLE [dbo].[quiz_questions]  WITH CHECK ADD  CONSTRAINT [chk_correct_answer] CHECK  (([correct_answer]='D' OR [correct_answer]='C' OR [correct_answer]='B' OR [correct_answer]='A'))
+GO
+ALTER TABLE [dbo].[quiz_questions] CHECK CONSTRAINT [chk_correct_answer]
+GO
+ALTER TABLE [dbo].[reports]  WITH CHECK ADD  CONSTRAINT [chk_report_status] CHECK  (([status]='REJECTED' OR [status]='RESOLVED' OR [status]='PENDING'))
+GO
+ALTER TABLE [dbo].[reports] CHECK CONSTRAINT [chk_report_status]
+GO
+ALTER TABLE [dbo].[upload_logs]  WITH CHECK ADD  CONSTRAINT [chk_storage_provider] CHECK  (([storage_provider]='S3' OR [storage_provider]='LOCAL' OR [storage_provider]='SUPABASE'))
+GO
+ALTER TABLE [dbo].[upload_logs] CHECK CONSTRAINT [chk_storage_provider]
+GO
+ALTER TABLE [dbo].[upload_logs]  WITH CHECK ADD  CONSTRAINT [chk_upload_status] CHECK  (([upload_status]='FAILED' OR [upload_status]='SUCCESS' OR [upload_status]='UPLOADING'))
+GO
+ALTER TABLE [dbo].[upload_logs] CHECK CONSTRAINT [chk_upload_status]
+GO
+ALTER TABLE [dbo].[user_settings]  WITH CHECK ADD  CONSTRAINT [chk_user_settings_language] CHECK  (([language]='vi' OR [language]='en'))
+GO
+ALTER TABLE [dbo].[user_settings] CHECK CONSTRAINT [chk_user_settings_language]
+GO
+ALTER TABLE [dbo].[user_settings]  WITH CHECK ADD  CONSTRAINT [chk_user_settings_theme] CHECK  (([theme]='system' OR [theme]='dark' OR [theme]='light'))
+GO
+ALTER TABLE [dbo].[user_settings] CHECK CONSTRAINT [chk_user_settings_theme]
+GO
+ALTER TABLE [dbo].[users]  WITH CHECK ADD  CONSTRAINT [chk_users_status] CHECK  (([status]='BANNED' OR [status]='INACTIVE' OR [status]='ACTIVE'))
+GO
+ALTER TABLE [dbo].[users] CHECK CONSTRAINT [chk_users_status]
 GO
