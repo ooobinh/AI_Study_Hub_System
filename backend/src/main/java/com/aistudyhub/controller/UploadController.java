@@ -7,6 +7,7 @@ import com.aistudyhub.dto.document.StorageStatusDto;
 import com.aistudyhub.service.DocumentAiService;
 import com.aistudyhub.service.DocumentService;
 import com.aistudyhub.service.SupabaseStorageService;
+import com.aistudyhub.service.WorkspaceService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -28,17 +29,20 @@ public class UploadController {
     private final DocumentService documentService;
     private final DocumentAiService documentAiService;
     private final SupabaseStorageService supabaseStorageService;
+    private final WorkspaceService workspaceService;
     private final Path uploadDir;
 
     public UploadController(
             DocumentService documentService,
             DocumentAiService documentAiService,
             SupabaseStorageService supabaseStorageService,
+            WorkspaceService workspaceService,
             @Value("${app.upload.dir}") String uploadDir
     ) {
         this.documentService = documentService;
         this.documentAiService = documentAiService;
         this.supabaseStorageService = supabaseStorageService;
+        this.workspaceService = workspaceService;
         this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -55,6 +59,7 @@ public class UploadController {
     @PostMapping("/documents")
     public DocumentDto uploadDocument(
             @RequestParam Long ownerId,
+            @RequestParam(required = false) Long workspaceId,
             @RequestParam MultipartFile file,
             HttpServletRequest request
     ) {
@@ -90,7 +95,9 @@ public class UploadController {
                     null,
                     "PRIVATE"
             ));
-            return documentAiService.processUploadedDocument(document, fileBytes);
+            DocumentDto processed = documentAiService.processUploadedDocument(document, fileBytes);
+            attachToWorkspaceIfNeeded(workspaceId, processed.id(), ownerId);
+            return processed;
         }
 
         String safeName = originalName.replaceAll("[^a-zA-Z0-9._() -]", "_");
@@ -126,6 +133,14 @@ public class UploadController {
                 null,
                 "PRIVATE"
         ));
-        return documentAiService.processUploadedDocument(document, fileBytes);
+        DocumentDto processed = documentAiService.processUploadedDocument(document, fileBytes);
+        attachToWorkspaceIfNeeded(workspaceId, processed.id(), ownerId);
+        return processed;
+    }
+
+    private void attachToWorkspaceIfNeeded(Long workspaceId, Long documentId, Long ownerId) {
+        if (workspaceId != null) {
+            workspaceService.addDocument(workspaceId, documentId, ownerId);
+        }
     }
 }

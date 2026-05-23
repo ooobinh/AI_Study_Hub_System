@@ -19,13 +19,15 @@ import {
   X,
   Shield,
   BookOpen,
-  User
+  User,
+  UsersRound
 } from "lucide-react"
 
 const navItems = [
   { icon: LayoutDashboard, labelKey: "dashboard", href: "/dashboard" },
   { icon: FileText, labelKey: "documents", href: "/documents" },
   { icon: BookOpen, labelKey: "subjects", href: "/subjects" },
+  { icon: UsersRound, labelKey: "workspaces", href: "/workspaces" },
   { icon: MessageSquare, labelKey: "chat", href: "/chat" },
   { icon: BarChart3, labelKey: "analytics", href: "/analytics" },
   { icon: User, labelKey: "profile", href: "/profile" },

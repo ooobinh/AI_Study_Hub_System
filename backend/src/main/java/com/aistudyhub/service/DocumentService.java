@@ -117,11 +117,30 @@ public class DocumentService {
         DocumentDto document = findByIdInternal(id, userId);
 
         if ("PRIVATE".equals(document.visibility())
-                && (userId == null || (!document.ownerId().equals(userId) && !isAdminUser(userId)))) {
+                && (userId == null || (!document.ownerId().equals(userId)
+                && !isAdminUser(userId)
+                && !isWorkspaceMemberForDocument(userId, id)))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "You do not have access to this document");
         }
 
         return document;
+    }
+
+    public List<DocumentDto> listForWorkspace(Long workspaceId, Long userId) {
+        if (workspaceId == null || userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "workspaceId and userId are required");
+        }
+
+        if (!isWorkspaceMember(workspaceId, userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this workspace");
+        }
+
+        return jdbcTemplate.query(baseSelect() + """
+                INNER JOIN workspace_documents wd
+                    ON wd.document_id = d.document_id AND wd.workspace_id = ?
+                WHERE d.status <> 'DELETED'
+                ORDER BY wd.created_at DESC
+                """, documentMapper, userId, workspaceId);
     }
 
     @Transactional
@@ -343,6 +362,39 @@ public class DocumentService {
                 INNER JOIN roles r ON r.role_id = ur.role_id
                 WHERE ur.user_id = ? AND r.role_name = 'ADMIN'
                 """, Integer.class, userId);
+        return count != null && count > 0;
+    }
+
+    private boolean isWorkspaceMemberForDocument(Long userId, Long documentId) {
+        if (userId == null || documentId == null) {
+            return false;
+        }
+
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM workspace_documents wd
+                INNER JOIN workspace_members wm ON wm.workspace_id = wd.workspace_id
+                INNER JOIN workspaces w ON w.workspace_id = wd.workspace_id
+                WHERE wd.document_id = ?
+                  AND wm.user_id = ?
+                  AND w.status = 'ACTIVE'
+                """, Integer.class, documentId, userId);
+        return count != null && count > 0;
+    }
+
+    private boolean isWorkspaceMember(Long workspaceId, Long userId) {
+        if (workspaceId == null || userId == null) {
+            return false;
+        }
+
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM workspace_members wm
+                INNER JOIN workspaces w ON w.workspace_id = wm.workspace_id
+                WHERE wm.workspace_id = ?
+                  AND wm.user_id = ?
+                  AND w.status = 'ACTIVE'
+                """, Integer.class, workspaceId, userId);
         return count != null && count > 0;
     }
 
