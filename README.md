@@ -394,7 +394,7 @@ AI-Study-Hub/
 
 | Nguyen Thanh Truc - SE190755 | Backend Developer               |
 
-\---
+\----
 
 
 
