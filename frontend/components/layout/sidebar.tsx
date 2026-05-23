@@ -20,7 +20,8 @@ import {
   Shield,
   BookOpen,
   User,
-  UsersRound
+  UsersRound,
+  MessagesSquare
 } from "lucide-react"
 
 const navItems = [
@@ -28,6 +29,7 @@ const navItems = [
   { icon: FileText, labelKey: "documents", href: "/documents" },
   { icon: BookOpen, labelKey: "subjects", href: "/subjects" },
   { icon: UsersRound, labelKey: "workspaces", href: "/workspaces" },
+  { icon: MessagesSquare, labelKey: "forum", href: "/forum" },
   { icon: MessageSquare, labelKey: "chat", href: "/chat" },
   { icon: BarChart3, labelKey: "analytics", href: "/analytics" },
   { icon: User, labelKey: "profile", href: "/profile" },

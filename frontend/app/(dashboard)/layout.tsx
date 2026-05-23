@@ -7,6 +7,7 @@ import { useAuth } from "@/components/providers/auth-provider"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TopNav } from "@/components/layout/top-nav"
 import { FloatingAssistant } from "@/components/layout/floating-assistant"
+import { getApiUrl } from "@/lib/api"
 
 export default function DashboardLayout({
   children,
@@ -21,6 +22,20 @@ export default function DashboardLayout({
       router.replace("/login")
     }
   }, [isLoading, router, user])
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    const sendHeartbeat = () => {
+      fetch(`${getApiUrl()}/api/forum/presence?userId=${user.id}`, { method: "POST" }).catch(() => undefined)
+    }
+
+    sendHeartbeat()
+    const interval = window.setInterval(sendHeartbeat, 60000)
+    return () => window.clearInterval(interval)
+  }, [user?.id])
 
   if (isLoading || !user) {
     return (
