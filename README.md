@@ -196,7 +196,32 @@ The system aims to:
 
 \---
 
+\# 5. Workspaces (Collaboration)
 
+\* Create and manage workspaces
+\* Join workspaces (including accepting invitations)
+\* Manage workspace members and roles
+\* Add documents to a workspace
+\* Workspace messages (discussion/chat)
+\* Tasks inside a workspace (create/update)
+\* Posts inside a workspace (create comments, pin posts)
+\* Run AI assistant features within a workspace
+\* Quizzes in a workspace (attempt/complete)
+\* Flashcards set progress tracking
+
+\---
+
+\# 6. Forum (Community)
+
+\* Browse/search forum posts and filter by type
+\* View forum post details
+\* Create new forum posts
+\* Upload document-based posts to the forum
+\* Answer forum posts
+\* Forum rankings by period (e.g., weekly)
+\* Presence/active users tracking (heartbeat + active list)
+
+\---
 
 \# ✨ Advanced Features (Optional)
 
