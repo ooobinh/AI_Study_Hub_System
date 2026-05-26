@@ -3,10 +3,12 @@ package com.aistudyhub.dto.workspace;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public record CreateWorkspaceRequest(
-        @NotBlank @Size(max = 150) String name,
+import java.time.LocalDateTime;
+
+public record CreateWorkspaceTaskRequest(
+        @NotBlank @Size(max = 180) String title,
         @Size(max = 4000) String description,
-        Long subjectId,
-        @Size(max = 20) String visibility
+        Long assignedTo,
+        LocalDateTime deadlineAt
 ) {
 }
