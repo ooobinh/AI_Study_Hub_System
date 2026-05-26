@@ -101,6 +101,13 @@ public class GeminiService {
         return generate(prompt);
     }
 
+    public String generateStudyContent(String prompt) {
+        if (!isConfigured()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini API key is not configured");
+        }
+        return generate(prompt);
+    }
+
     private String generate(String prompt) {
         try {
             String body = objectMapper.writeValueAsString(new GenerateRequest(List.of(

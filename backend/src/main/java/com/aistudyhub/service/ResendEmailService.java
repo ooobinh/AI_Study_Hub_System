@@ -76,6 +76,51 @@ public class ResendEmailService {
         }
     }
 
+    public void sendWorkspaceInviteEmail(String toEmail, String workspaceName, String inviterName, String inviteUrl) {
+        if (!isConfigured()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Resend API is not configured");
+        }
+
+        String html = """
+                <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+                  <h2>You are invited to AI Study Hub</h2>
+                  <p>%s invited you to join the workspace <strong>%s</strong>.</p>
+                  <p><a href="%s" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none">Join workspace</a></p>
+                  <p>If the button does not work, open this link:</p>
+                  <p><a href="%s">%s</a></p>
+                </div>
+                """.formatted(escapeHtml(inviterName), escapeHtml(workspaceName), inviteUrl, inviteUrl, inviteUrl);
+
+        sendEmail(toEmail, "AI Study Hub workspace invitation", html);
+    }
+
+    private void sendEmail(String toEmail, String subject, String html) {
+        try {
+            String body = objectMapper.writeValueAsString(new EmailRequest(
+                    fromEmail,
+                    List.of(toEmail),
+                    subject,
+                    html
+            ));
+
+            HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.resend.com/emails"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "Resend email failed: " + response.body());
+            }
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not send email with Resend");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Email request was interrupted");
+        }
+    }
+
     private String escapeHtml(String value) {
         if (value == null || value.isBlank()) {
             return "there";
