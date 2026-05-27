@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -133,7 +135,11 @@ public class NotificationService {
                 rs.getString("title"),
                 rs.getString("content"),
                 rs.getBoolean("is_read"),
-                rs.getTimestamp("created_at").toLocalDateTime()
+                toLocalDateTime(rs.getTimestamp("created_at"))
         );
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

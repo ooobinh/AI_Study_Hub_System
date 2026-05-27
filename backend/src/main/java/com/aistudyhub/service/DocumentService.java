@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -49,8 +51,8 @@ public class DocumentService {
                     rs.getInt("view_count"),
                     rs.getBoolean("favorite"),
                     findTags(id),
-                    rs.getTimestamp("created_at").toLocalDateTime(),
-                    rs.getTimestamp("updated_at").toLocalDateTime()
+                    toLocalDateTime(rs.getTimestamp("created_at")),
+                    toLocalDateTime(rs.getTimestamp("updated_at"))
             );
         }
     };
@@ -260,7 +262,7 @@ public class DocumentService {
                 rs.getString("share_token"),
                 rs.getString("permission"),
                 "",
-                rs.getTimestamp("created_at").toLocalDateTime()
+                toLocalDateTime(rs.getTimestamp("created_at"))
         ), token).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Share link was not created"));
     }
@@ -406,5 +408,9 @@ public class DocumentService {
     private Integer nullableInt(ResultSet rs, String column) throws SQLException {
         int value = rs.getInt(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }
