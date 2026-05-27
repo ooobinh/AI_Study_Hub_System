@@ -4,9 +4,10 @@ import { motion } from "framer-motion"
 import type { FormEvent } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Bell, User, Command, CheckCheck, Loader2, Megaphone, MessageSquare, Send, X } from "lucide-react"
+import { Search, Bell, User, Command, CheckCheck, Megaphone, MessageSquare, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LanguageSwitcher } from "@/components/layout/language-switcher"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
@@ -249,10 +250,7 @@ export function TopNav() {
             </div>
             <div className="max-h-[360px] overflow-y-auto p-2">
               {isLoadingNotifications && (
-                <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading notifications...
-                </div>
+                <LogoLoader compact label="AI Study Hub" sublabel="Loading notifications..." />
               )}
 
               {!isLoadingNotifications && notificationError && (

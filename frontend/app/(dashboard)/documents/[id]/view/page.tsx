@@ -10,11 +10,11 @@ import {
   FileArchive,
   FileImage,
   FileText,
-  Loader2,
   Presentation,
   ShieldCheck,
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface DocumentDto {
@@ -227,10 +227,7 @@ export default function DocumentViewerPage() {
         className="min-h-[70vh] overflow-hidden rounded-xl border border-border/50 bg-secondary/20"
       >
         {isLoading ? (
-          <div className="flex min-h-[70vh] items-center justify-center text-muted-foreground">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading preview...
-          </div>
+          <LogoLoader className="min-h-[70vh]" label="AI Study Hub" sublabel="Loading preview..." />
         ) : document && previewKind === "pdf" && previewUrl ? (
           <iframe
             src={previewUrl}

@@ -4,7 +4,8 @@ import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { CheckCircle2, Loader2, ShieldCheck, XCircle } from "lucide-react"
+import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface AccountActionResult {
@@ -59,15 +60,17 @@ function ConfirmContent() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         className="glass-card relative w-full max-w-lg rounded-2xl p-8 text-center"
       >
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/25 bg-primary/15 text-primary">
-          {loading ? (
-            <Loader2 className="h-8 w-8 animate-spin" />
-          ) : isSuccess ? (
-            <CheckCircle2 className="h-8 w-8" />
-          ) : (
-            <XCircle className="h-8 w-8 text-destructive" />
-          )}
-        </div>
+        {loading ? (
+          <LogoLoader compact label="AI Study Hub" sublabel="Verifying secure link..." className="py-0" />
+        ) : (
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/25 bg-primary/15 text-primary">
+            {isSuccess ? (
+              <CheckCircle2 className="h-8 w-8" />
+            ) : (
+              <XCircle className="h-8 w-8 text-destructive" />
+            )}
+          </div>
+        )}
         <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground">
           <ShieldCheck className="h-4 w-4" />
           AI Study Hub
@@ -95,9 +98,7 @@ export default function AccountConfirmPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-          Loading...
-        </div>
+        <LogoLoader fullScreen label="AI Study Hub" sublabel="Loading confirmation..." />
       }
     >
       <ConfirmContent />

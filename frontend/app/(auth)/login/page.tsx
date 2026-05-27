@@ -1,10 +1,11 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Sparkles, Mail, Lock, User, Github, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { LanguageSwitcher } from "@/components/layout/language-switcher"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
@@ -206,6 +207,30 @@ export default function AuthPage() {
 
       {/* Animated Background */}
       <div className="absolute inset-0 gradient-mesh" />
+
+      <AnimatePresence>
+        {isSubmitting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 flex items-center justify-center bg-background/65 p-4 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="glass-card rounded-2xl px-10 py-8 shadow-2xl"
+            >
+              <LogoLoader
+                className="min-h-0 py-0"
+                label="AI Study Hub"
+                sublabel={isForgotPassword ? t("sendResetLink") : t("pleaseWait")}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Floating Orbs */}
       <motion.div
