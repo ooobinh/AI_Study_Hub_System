@@ -2,6 +2,7 @@ package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
 import com.aistudyhub.dto.ai.AiDocumentAnalysis;
+import com.aistudyhub.dto.ai.GeminiStatusDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,12 +16,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class GeminiService {
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private static final String DEFAULT_MODEL = "gemini-2.5-flash";
+    private static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(12))
+            .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String apiKey;
     private final String model;
@@ -32,8 +39,11 @@ public class GeminiService {
             @Value("${app.gemini.base-url}") String baseUrl
     ) {
         this.apiKey = apiKey;
-        this.model = model;
-        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.model = model == null || model.isBlank() ? DEFAULT_MODEL : model.trim();
+        String normalizedBaseUrl = baseUrl == null || baseUrl.isBlank() ? DEFAULT_BASE_URL : baseUrl.trim();
+        this.baseUrl = normalizedBaseUrl.endsWith("/")
+                ? normalizedBaseUrl.substring(0, normalizedBaseUrl.length() - 1)
+                : normalizedBaseUrl;
     }
 
     public boolean isConfigured() {
@@ -42,6 +52,19 @@ public class GeminiService {
 
     public String model() {
         return model;
+    }
+
+    public GeminiStatusDto status() {
+        if (!isConfigured()) {
+            return new GeminiStatusDto(false, false, model, "GEMINI_API_KEY is not configured");
+        }
+
+        try {
+            String text = generate("Reply with exactly: ok");
+            return new GeminiStatusDto(true, true, model, text.isBlank() ? "Gemini is reachable" : text);
+        } catch (ApiException exception) {
+            return new GeminiStatusDto(true, false, model, exception.getMessage());
+        }
     }
 
     public AiDocumentAnalysis analyzeDocument(String fileName, String fileType, String extractedText) {
@@ -117,12 +140,16 @@ public class GeminiService {
             HttpRequest request = HttpRequest.newBuilder(URI.create("%s/models/%s:generateContent".formatted(baseUrl, encodedModel)))
                     .header("Content-Type", "application/json")
                     .header("x-goog-api-key", apiKey)
+                    .timeout(Duration.ofSeconds(45))
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "Gemini request failed: " + response.body());
+                throw new ApiException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Gemini request failed (HTTP %d): %s".formatted(response.statusCode(), geminiErrorMessage(response.body()))
+                );
             }
 
             JsonNode root = objectMapper.readTree(response.body());
@@ -136,11 +163,13 @@ public class GeminiService {
                 }
             }
             if (output.isEmpty()) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "Gemini returned an empty response");
+                String finishReason = root.path("candidates").path(0).path("finishReason").asText("");
+                String reason = finishReason.isBlank() ? "Gemini returned an empty response" : "Gemini returned no text. Finish reason: " + finishReason;
+                throw new ApiException(HttpStatus.BAD_GATEWAY, reason);
             }
             return output.toString().trim();
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not call Gemini API");
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not call Gemini API: " + clean(exception.getMessage(), 240));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Gemini request was interrupted");
@@ -162,6 +191,23 @@ public class GeminiService {
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Gemini returned invalid JSON");
         }
+    }
+
+    private String geminiErrorMessage(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return "empty error response";
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            String message = root.path("error").path("message").asText("");
+            String status = root.path("error").path("status").asText("");
+            if (!message.isBlank()) {
+                return status.isBlank() ? clean(message, 600) : "%s - %s".formatted(status, clean(message, 600));
+            }
+        } catch (IOException ignored) {
+            // Fall back to a short raw response below.
+        }
+        return clean(responseBody, 600);
     }
 
     private List<String> readTags(JsonNode tagsNode) {

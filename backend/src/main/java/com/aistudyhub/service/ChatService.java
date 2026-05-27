@@ -147,7 +147,9 @@ public class ChatService {
             String context = documentAiService.documentContext(session.documentId());
             answer = geminiService.answerQuestion(request.messageText(), context, recentMessages(sessionId));
         } catch (ApiException exception) {
-            answer = "Gemini is not configured yet. Add GEMINI_API_KEY to backend/.env, restart the backend, then ask again.";
+            answer = exception.getStatus() == HttpStatus.SERVICE_UNAVAILABLE
+                    ? "Gemini is not configured yet. Add GEMINI_API_KEY to backend/.env or Render environment variables, restart the backend, then ask again."
+                    : "Gemini error: " + exception.getMessage();
         }
 
         jdbcTemplate.update("""
