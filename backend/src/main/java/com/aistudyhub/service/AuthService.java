@@ -28,7 +28,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,7 +59,7 @@ public class AuthService {
                     rs.getString("major"),
                     rs.getString("status"),
                     findRoles(userId),
-                    rs.getTimestamp("created_at").toLocalDateTime()
+                    toLocalDateTime(rs.getTimestamp("created_at"))
             );
         }
     };
@@ -302,6 +304,10 @@ public class AuthService {
                 WHERE ur.user_id = ?
                 ORDER BY r.role_name
                 """, String.class, userId);
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
     private String createDevelopmentToken(Long userId) {

@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -191,7 +193,7 @@ public class AdminService {
                 rs.getString("status"),
                 findRoles(userId),
                 rs.getLong("document_count"),
-                rs.getTimestamp("created_at").toLocalDateTime()
+                toLocalDateTime(rs.getTimestamp("created_at"))
         );
     }
 
@@ -207,8 +209,12 @@ public class AdminService {
                 rs.getString("reason"),
                 rs.getString("description"),
                 rs.getString("status"),
-                rs.getTimestamp("created_at").toLocalDateTime()
+                toLocalDateTime(rs.getTimestamp("created_at"))
         );
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
     private List<String> findRoles(Long userId) {
