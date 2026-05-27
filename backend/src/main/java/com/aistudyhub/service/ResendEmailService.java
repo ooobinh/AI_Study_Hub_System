@@ -94,7 +94,59 @@ public class ResendEmailService {
         sendEmail(toEmail, "AI Study Hub workspace invitation", html);
     }
 
+    public void sendEmailVerification(String toEmail, String fullName, String verifyUrl) {
+        String html = """
+                <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+                  <h2>Verify your AI Study Hub email</h2>
+                  <p>Hello %s,</p>
+                  <p>Confirm this email address to keep your account secure and enable account recovery.</p>
+                  <p><a href="%s" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none">Verify email</a></p>
+                  <p>If the button does not work, open this link:</p>
+                  <p><a href="%s">%s</a></p>
+                  <p>This link expires in 30 minutes.</p>
+                </div>
+                """.formatted(escapeHtml(fullName), verifyUrl, verifyUrl, verifyUrl);
+
+        sendEmail(toEmail, "Verify your AI Study Hub email", html);
+    }
+
+    public void sendEmailChangeConfirmation(String toEmail, String fullName, String confirmUrl) {
+        String html = """
+                <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+                  <h2>Confirm your new AI Study Hub email</h2>
+                  <p>Hello %s,</p>
+                  <p>Click the button below to confirm this email address for your AI Study Hub account.</p>
+                  <p><a href="%s" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none">Confirm new email</a></p>
+                  <p>If the button does not work, open this link:</p>
+                  <p><a href="%s">%s</a></p>
+                  <p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>
+                </div>
+                """.formatted(escapeHtml(fullName), confirmUrl, confirmUrl, confirmUrl);
+
+        sendEmail(toEmail, "Confirm your AI Study Hub email change", html);
+    }
+
+    public void sendAccountDeletionConfirmation(String toEmail, String fullName, String confirmUrl) {
+        String html = """
+                <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+                  <h2>Confirm AI Study Hub account deletion</h2>
+                  <p>Hello %s,</p>
+                  <p>We received a request to delete your AI Study Hub account. This action will deactivate your login and remove personal account details.</p>
+                  <p><a href="%s" style="display:inline-block;background:#dc2626;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none">Delete my account</a></p>
+                  <p>If the button does not work, open this link:</p>
+                  <p><a href="%s">%s</a></p>
+                  <p>This link expires in 30 minutes. If you did not request this, keep your account safe by ignoring this email.</p>
+                </div>
+                """.formatted(escapeHtml(fullName), confirmUrl, confirmUrl, confirmUrl);
+
+        sendEmail(toEmail, "Confirm AI Study Hub account deletion", html);
+    }
+
     private void sendEmail(String toEmail, String subject, String html) {
+        if (!isConfigured()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Resend API is not configured");
+        }
+
         try {
             String body = objectMapper.writeValueAsString(new EmailRequest(
                     fromEmail,

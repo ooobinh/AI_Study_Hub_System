@@ -6,7 +6,6 @@ import { SidebarProvider } from "@/components/providers/sidebar-provider"
 import { useAuth } from "@/components/providers/auth-provider"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TopNav } from "@/components/layout/top-nav"
-import { FloatingAssistant } from "@/components/layout/floating-assistant"
 import { getApiUrl } from "@/lib/api"
 
 export default function DashboardLayout({
@@ -55,7 +54,6 @@ export default function DashboardLayout({
             {children}
           </main>
         </div>
-        <FloatingAssistant />
       </div>
     </SidebarProvider>
   )

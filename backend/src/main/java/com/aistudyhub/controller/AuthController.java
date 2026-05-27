@@ -1,9 +1,15 @@
 package com.aistudyhub.controller;
 
 import com.aistudyhub.common.ApiException;
+import com.aistudyhub.dto.auth.AccountActionResultDto;
+import com.aistudyhub.dto.auth.AccountActionUserRequest;
+import com.aistudyhub.dto.auth.AccountSecurityDto;
 import com.aistudyhub.dto.auth.AuthResponse;
+import com.aistudyhub.dto.auth.ChangeEmailRequest;
+import com.aistudyhub.dto.auth.ChangePasswordRequest;
 import com.aistudyhub.dto.auth.ForgotPasswordRequest;
 import com.aistudyhub.dto.auth.GoogleLoginRequest;
+import com.aistudyhub.dto.auth.LinkGoogleAccountRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
@@ -63,6 +69,50 @@ public class AuthController {
     @PostMapping("/reset-password")
     public MessageResponse resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         return authService.resetPassword(request);
+    }
+
+    @GetMapping("/account/security")
+    public AccountSecurityDto accountSecurity(@RequestParam Long userId) {
+        return authService.accountSecurity(userId);
+    }
+
+    @PostMapping("/account/send-email-verification")
+    public MessageResponse sendEmailVerification(
+            @Valid @RequestBody AccountActionUserRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.sendEmailVerification(request.userId(), resolveFrontendUrl(httpRequest));
+    }
+
+    @PostMapping("/account/change-email")
+    public MessageResponse requestEmailChange(
+            @Valid @RequestBody ChangeEmailRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.requestEmailChange(request, resolveFrontendUrl(httpRequest));
+    }
+
+    @PostMapping("/account/change-password")
+    public MessageResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        return authService.changePassword(request);
+    }
+
+    @PostMapping("/account/delete-request")
+    public MessageResponse requestAccountDeletion(
+            @Valid @RequestBody AccountActionUserRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.requestAccountDeletion(request.userId(), resolveFrontendUrl(httpRequest));
+    }
+
+    @PostMapping("/account/link-google")
+    public AccountSecurityDto linkGoogleAccount(@Valid @RequestBody LinkGoogleAccountRequest request) {
+        return authService.linkGoogleAccount(request);
+    }
+
+    @GetMapping("/account/confirm")
+    public AccountActionResultDto confirmAccountAction(@RequestParam String token) {
+        return authService.confirmAccountAction(token);
     }
 
     @GetMapping("/users/{id}")
