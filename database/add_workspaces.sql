@@ -127,3 +127,6 @@ BEGIN
     CREATE INDEX [idx_workspace_messages_workspace_created] ON [dbo].[workspace_messages]([workspace_id], [created_at])
 END
 GO
+
+
+

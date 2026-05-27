@@ -1,7 +1,15 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import {
+  ChangeEvent,
+  FormEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import { useTheme } from "next-themes"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
@@ -10,6 +18,7 @@ import { isValidEmail } from "@/lib/validation"
 import {
   AlertTriangle,
   Bell,
+  Camera,
   CheckCircle2,
   CreditCard,
   HelpCircle,
@@ -24,6 +33,7 @@ import {
   Smartphone,
   Sun,
   Trash2,
+  Upload,
   User,
   XCircle,
 } from "lucide-react"
@@ -70,6 +80,16 @@ interface AccountSecurity {
   createdAt?: string | null
 }
 
+interface BackendUser {
+  id: number
+  fullName: string
+  email: string
+  avatarUrl?: string | null
+  university?: string | null
+  major?: string | null
+  roles: string[]
+}
+
 interface MessageResponse {
   message: string
 }
@@ -82,11 +102,11 @@ const legacyTabs: Record<string, string> = {
 
 const container = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.07 } },
 }
 
 const item = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 14 },
   show: { opacity: 1, y: 0 },
 }
 
@@ -114,6 +134,14 @@ async function postJson<T>(path: string, body: Record<string, unknown>): Promise
   return data as T
 }
 
+function splitName(value?: string | null) {
+  const parts = value?.trim().split(/\s+/).filter(Boolean) || []
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  }
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "Not available"
   return new Intl.DateTimeFormat("en", {
@@ -137,9 +165,10 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
   const [googleReady, setGoogleReady] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const { theme, setTheme } = useTheme()
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const { t } = useLanguage()
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
@@ -160,14 +189,16 @@ export default function SettingsPage() {
       if (!response.ok) {
         throw new Error(body?.message || "Could not load account security")
       }
-      setAccount(body as AccountSecurity)
-      setNewEmail((body as AccountSecurity).email)
+      const security = body as AccountSecurity
+      setAccount(security)
+      setNewEmail(security.email)
+      updateUser({ email: security.email })
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
       setIsAccountLoading(false)
     }
-  }, [user?.id])
+  }, [updateUser, user?.id])
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
     if (!user?.id || !response.credential) {
@@ -254,6 +285,8 @@ export default function SettingsPage() {
 
   const selectTab = (tab: string) => {
     setActiveTab(tab)
+    setError("")
+    setNotice("")
     const nextUrl = tab === "account" ? "/settings" : `/settings?tab=${tab}`
     window.history.replaceState(null, "", nextUrl)
   }
@@ -270,6 +303,57 @@ export default function SettingsPage() {
     } catch (err) {
       setError(getNetworkErrorMessage(err))
       return false
+    } finally {
+      setActionLoading("")
+    }
+  }
+
+  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !user?.id) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    setActionLoading("avatar")
+    setError("")
+    setNotice("")
+    try {
+      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+        method: "POST",
+        body: formData,
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not upload avatar")
+      }
+      const nextUser = body as BackendUser
+      updateUser({ avatarUrl: nextUser.avatarUrl })
+      setNotice("Profile picture updated.")
+    } catch (err) {
+      setError(getNetworkErrorMessage(err))
+    } finally {
+      setActionLoading("")
+      event.target.value = ""
+    }
+  }
+
+  const deleteAvatar = async () => {
+    if (!user?.id) return
+    setActionLoading("avatar-delete")
+    setError("")
+    setNotice("")
+    try {
+      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+        method: "DELETE",
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not delete avatar")
+      }
+      updateUser({ avatarUrl: null })
+      setNotice("Profile picture removed.")
+    } catch (err) {
+      setError(getNetworkErrorMessage(err))
     } finally {
       setActionLoading("")
     }
@@ -345,346 +429,312 @@ export default function SettingsPage() {
   }
 
   const selectedTheme = mounted ? theme : "dark"
-  const nameParts = user?.name?.trim().split(/\s+/) || []
-  const initials = nameParts.map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AI"
-  const completionItems = [
-    Boolean(account?.emailVerified),
-    Boolean(account?.googleLinked),
-    Boolean(user?.avatarUrl),
-    Boolean(user?.university || user?.major),
-  ]
-  const completion = Math.round((completionItems.filter(Boolean).length / completionItems.length) * 100)
+  const { firstName, lastName } = splitName(user?.name)
+  const initials = [firstName, lastName].filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AI"
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.div variants={item} className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground md:text-3xl">{t("settings")}</h1>
-          <p className="mt-1 text-muted-foreground">{t("managePreferences")}</p>
-        </div>
-        <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-card/60 p-2">
-          {[
-            { label: "Verified", value: account?.emailVerified ? "Yes" : "No" },
-            { label: "Google", value: account?.googleLinked ? "Linked" : "Off" },
-            { label: "Profile", value: `${completion}%` },
-          ].map((stat) => (
-            <div key={stat.label} className="min-w-24 rounded-lg bg-secondary/40 px-3 py-2 text-center">
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-              <p className="text-sm font-semibold text-foreground">{stat.value}</p>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+    <motion.div variants={container} initial="hidden" animate="show" className="mx-auto max-w-7xl space-y-8">
+      <motion.header variants={item} className="flex flex-col gap-2">
+        <h1 className="text-3xl font-semibold tracking-normal text-foreground">Settings</h1>
+        <p className="text-base text-muted-foreground">Manage and secure your account</p>
+      </motion.header>
 
-      <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <motion.aside variants={item}>
-          <div className="glass-card sticky top-6 rounded-xl p-3">
+      <div className="grid gap-10 lg:grid-cols-[230px_minmax(0,1fr)]">
+        <motion.aside variants={item} className="lg:sticky lg:top-6 lg:h-fit">
+          <nav className="space-y-1">
             {tabs.map((tab) => (
-              <motion.button
+              <button
                 key={tab.id}
+                type="button"
                 onClick={() => selectTab(tab.id)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                   activeTab === tab.id
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                 }`}
-                whileHover={{ x: 4 }}
               >
                 <tab.icon className="h-4 w-4" />
-                <span className="text-sm font-medium">{tab.label}</span>
-              </motion.button>
+                <span className="font-medium">{tab.label}</span>
+              </button>
             ))}
-          </div>
+          </nav>
         </motion.aside>
 
         <motion.main variants={item} className="min-w-0">
+          {(notice || error) && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+                error
+                  ? "border-destructive/30 bg-destructive/10 text-destructive"
+                  : "border-primary/30 bg-primary/10 text-primary"
+              }`}
+            >
+              {error || notice}
+            </motion.div>
+          )}
+
           {activeTab === "account" && (
-            <div className="grid gap-5 2xl:grid-cols-[1.05fr_1.4fr]">
-              <section className="glass-card rounded-xl p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-primary/25 bg-primary/15 text-xl font-bold text-primary shadow-sm">
-                      {user?.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={user.avatarUrl} alt="" className="h-full w-full rounded-2xl object-cover" />
-                      ) : (
-                        initials
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-foreground">{user?.name || t("student")}</p>
-                      <p className="text-sm text-muted-foreground">{account?.email || user?.email}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <StatusPill active={Boolean(account?.emailVerified)} activeText="Email verified" inactiveText="Email unverified" />
-                        <StatusPill active={Boolean(account?.googleLinked)} activeText="Google linked" inactiveText="Google not linked" />
-                      </div>
-                    </div>
+            <div className="divide-y divide-border/70">
+              <SettingRow
+                title="Profile picture"
+                description="Accepted files JPG, PNG, SVG"
+              >
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={uploadAvatar}
+                    className="hidden"
+                  />
+                  <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-lg font-semibold text-primary">
+                    {user?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      initials
+                    )}
                   </div>
-                  {isAccountLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-                </div>
-
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  <InfoTile label="University" value={user?.university || "Not set"} />
-                  <InfoTile label="Major" value={user?.major || "Not set"} />
-                  <InfoTile label="Role" value={user?.role === "admin" ? "Admin" : "User"} />
-                  <InfoTile label="Joined" value={formatDate(account?.createdAt)} />
-                </div>
-
-                <div className="mt-6 rounded-xl border border-border/50 bg-secondary/25 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Account readiness</p>
-                      <p className="text-xs text-muted-foreground">Identity, recovery and sign-in coverage.</p>
-                    </div>
-                    <span className="text-sm font-semibold text-primary">{completion}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                    <motion.div
-                      className="h-full rounded-full bg-primary"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${completion}%` }}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <section className="grid gap-5">
-                {(notice || error) && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`rounded-xl border px-4 py-3 text-sm ${
-                      error
-                        ? "border-destructive/30 bg-destructive/10 text-destructive"
-                        : "border-primary/30 bg-primary/10 text-primary"
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={actionLoading === "avatar"}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm hover:bg-secondary disabled:opacity-60"
                   >
-                    {error || notice}
-                  </motion.div>
-                )}
-
-                <div className="grid gap-5 lg:grid-cols-2">
-                  <ActionPanel
-                    icon={<Mail className="h-5 w-5" />}
-                    title="Email verification"
-                    description={account?.emailVerified ? `Verified on ${formatDate(account.emailVerifiedAt)}` : "Confirm your email to protect account recovery."}
+                    {actionLoading === "avatar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deleteAvatar}
+                    disabled={!user?.avatarUrl || actionLoading === "avatar-delete"}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-destructive/30 bg-background px-4 text-sm font-medium text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-50"
                   >
+                    {actionLoading === "avatar-delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Delete
+                  </button>
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                title="Personal Information"
+                description="Shown on your public profile"
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="First name" value={firstName} readOnly />
+                  <Field label="Last name" value={lastName} readOnly placeholder="Last name" />
+                  <Field label="Email Address" value={account?.email || user?.email || ""} readOnly className="md:col-span-2" />
+                  <Field label="Major" value={user?.major || ""} readOnly placeholder="Not set" />
+                  <Field label="University" value={user?.university || ""} readOnly placeholder="Not set" />
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                title="Email verification"
+                description={account?.emailVerified ? `Verified on ${formatDate(account.emailVerifiedAt)}` : "Confirm your email before sensitive account changes"}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <StatusPill active={Boolean(account?.emailVerified)} activeText="Verified" inactiveText="Not verified" />
+                  <button
+                    type="button"
+                    onClick={requestEmailVerification}
+                    disabled={account?.emailVerified || actionLoading === "verify-email"}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm font-medium text-background disabled:opacity-50"
+                  >
+                    {actionLoading === "verify-email" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send email
+                  </button>
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                title="Change email"
+                description="A confirmation link will be sent to the new email"
+              >
+                <form onSubmit={requestEmailChange} className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(event) => setNewEmail(event.target.value)}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <button
+                    type="submit"
+                    disabled={actionLoading === "change-email"}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-foreground px-4 text-sm font-medium text-background disabled:opacity-60"
+                  >
+                    {actionLoading === "change-email" && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Confirm
+                  </button>
+                </form>
+              </SettingRow>
+
+              <SettingRow
+                title="Google account"
+                description="Use Google sign-in with your AI Study Hub account"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <StatusPill active={Boolean(account?.googleLinked)} activeText="Linked" inactiveText="Not linked" />
+                  {account?.googleLinked ? (
+                    <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-secondary/50 px-4 text-sm font-medium text-foreground">
+                      <GoogleIcon />
+                      Google
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      disabled={account?.emailVerified || actionLoading === "verify-email"}
-                      onClick={requestEmailVerification}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={linkGoogle}
+                      disabled={actionLoading === "google"}
+                      className="relative inline-flex h-10 min-w-44 items-center justify-center gap-2 overflow-hidden rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm hover:bg-secondary disabled:opacity-60"
                     >
-                      {actionLoading === "verify-email" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      {account?.emailVerified ? "Verified" : "Send verification"}
+                      {googleClientId && <div ref={googleButtonRef} className="absolute inset-0 z-10 opacity-0" />}
+                      {actionLoading === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
+                      <span>{googleReady || !googleClientId ? "Link Google" : "Loading Google"}</span>
                     </button>
-                  </ActionPanel>
-
-                  <ActionPanel
-                    icon={<Link2 className="h-5 w-5" />}
-                    title="Google account"
-                    description={account?.googleLinked ? "Google sign-in is connected to this account." : "Link Google for faster sign-in with the same email."}
-                  >
-                    {account?.googleLinked ? (
-                      <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 px-4 text-sm font-medium text-primary">
-                        <GoogleIcon />
-                        Linked
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={linkGoogle}
-                        disabled={actionLoading === "google"}
-                        className="relative inline-flex h-10 min-w-44 items-center justify-center gap-2 overflow-hidden rounded-xl border border-border/50 bg-card px-4 text-sm font-medium text-foreground hover:bg-secondary/60 disabled:opacity-60"
-                      >
-                        {googleClientId && <div ref={googleButtonRef} className="absolute inset-0 z-10 opacity-0" />}
-                        {actionLoading === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
-                        <span>{googleReady || !googleClientId ? "Link Google" : "Loading Google"}</span>
-                      </button>
-                    )}
-                  </ActionPanel>
+                  )}
                 </div>
+              </SettingRow>
 
-                <div className="grid gap-5 xl:grid-cols-2">
-                  <form onSubmit={requestEmailChange} className="glass-card rounded-xl p-5">
-                    <div className="mb-4 flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                        <Mail className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-semibold text-foreground">Change email</h2>
-                        <p className="text-sm text-muted-foreground">A confirmation link will be sent to the new email.</p>
-                      </div>
-                    </div>
-                    <label className="mb-2 block text-sm font-medium text-foreground">New email</label>
+              <SettingRow
+                title="Password"
+                description="Secure your account"
+              >
+                <form onSubmit={changePassword} className="grid gap-3">
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    placeholder="Current password"
+                    className="h-10 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <input
-                      type="email"
-                      value={newEmail}
-                      onChange={(event) => setNewEmail(event.target.value)}
-                      className="w-full rounded-xl border border-border/50 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="New password"
+                      className="h-10 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
                     />
-                    <button
-                      type="submit"
-                      disabled={actionLoading === "change-email"}
-                      className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-                    >
-                      {actionLoading === "change-email" && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Send confirmation
-                    </button>
-                  </form>
-
-                  <form onSubmit={changePassword} className="glass-card rounded-xl p-5">
-                    <div className="mb-4 flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                        <KeyRound className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-semibold text-foreground">Password</h2>
-                        <p className="text-sm text-muted-foreground">Update your password using the current one.</p>
-                      </div>
-                    </div>
-                    <div className="grid gap-3">
-                      <input
-                        type="password"
-                        value={currentPassword}
-                        onChange={(event) => setCurrentPassword(event.target.value)}
-                        placeholder="Current password"
-                        className="w-full rounded-xl border border-border/50 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                      />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <input
-                          type="password"
-                          value={newPassword}
-                          onChange={(event) => setNewPassword(event.target.value)}
-                          placeholder="New password"
-                          className="w-full rounded-xl border border-border/50 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                        />
-                        <input
-                          type="password"
-                          value={confirmPassword}
-                          onChange={(event) => setConfirmPassword(event.target.value)}
-                          placeholder="Confirm new password"
-                          className="w-full rounded-xl border border-border/50 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                        />
-                      </div>
-                    </div>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm new password"
+                      className="h-10 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="flex justify-end">
                     <button
                       type="submit"
                       disabled={actionLoading === "password"}
-                      className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-medium text-background disabled:opacity-60"
                     >
-                      {actionLoading === "password" && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Update password
+                      {actionLoading === "password" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                      Reset Password
                     </button>
-                  </form>
-                </div>
-
-                <form onSubmit={requestDeleteAccount} className="rounded-xl border border-destructive/25 bg-destructive/10 p-5">
-                  <div className="grid gap-4 lg:grid-cols-[1fr_360px] lg:items-end">
-                    <div>
-                      <div className="mb-3 flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
-                          <Trash2 className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h2 className="text-base font-semibold text-foreground">Delete account</h2>
-                          <p className="text-sm text-muted-foreground">A final confirmation link will be sent to your current email.</p>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Type your current email to request the deletion email.</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        value={deleteConfirmation}
-                        onChange={(event) => setDeleteConfirmation(event.target.value)}
-                        placeholder={account?.email || "current email"}
-                        className="min-w-0 flex-1 rounded-xl border border-destructive/30 bg-background/60 px-4 py-2.5 text-foreground outline-none focus:ring-2 focus:ring-destructive/20"
-                      />
-                      <button
-                        type="submit"
-                        disabled={actionLoading === "delete"}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-destructive px-4 text-sm font-medium text-destructive-foreground disabled:opacity-60"
-                      >
-                        {actionLoading === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-                        Request
-                      </button>
-                    </div>
                   </div>
                 </form>
-              </section>
+              </SettingRow>
+
+              <SettingRow
+                title="Delete account"
+                description="Requires confirmation from your current email"
+                danger
+              >
+                <form onSubmit={requestDeleteAccount} className="grid gap-3">
+                  <input
+                    type="email"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                    placeholder={account?.email || "Type your email"}
+                    className="h-10 rounded-xl border border-destructive/30 bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-destructive/20"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={actionLoading === "delete"}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-destructive px-5 text-sm font-medium text-destructive-foreground disabled:opacity-60"
+                    >
+                      {actionLoading === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                      Send delete link
+                    </button>
+                  </div>
+                </form>
+              </SettingRow>
+
+              {isAccountLoading && (
+                <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading account details...
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === "notifications" && (
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="divide-y divide-border/70">
               {[
                 { title: t("emailNotifications"), description: t("emailNotificationsDesc") },
                 { title: t("pushNotifications"), description: t("pushNotificationsDesc") },
                 { title: t("studyReminders"), description: t("studyRemindersDesc") },
                 { title: t("weeklySummary"), description: t("weeklySummaryDesc") },
               ].map((notification) => (
-                <div key={notification.title} className="glass-card rounded-xl p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-foreground">{notification.title}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{notification.description}</p>
-                    </div>
+                <SettingRow key={notification.title} title={notification.title} description={notification.description}>
+                  <div className="flex justify-end">
                     <button type="button" className="relative h-7 w-12 rounded-full bg-primary/20">
                       <motion.span className="absolute left-1 top-1 h-5 w-5 rounded-full bg-primary" layout />
                     </button>
                   </div>
-                </div>
+                </SettingRow>
               ))}
             </div>
           )}
 
           {activeTab === "appearance" && (
-            <div className="glass-card rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-foreground">{t("appearance")}</h2>
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                {[
-                  { id: "light", label: t("light"), icon: Sun },
-                  { id: "dark", label: t("dark"), icon: Moon },
-                  { id: "system", label: t("system"), icon: Smartphone },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setTheme(option.id)}
-                    className={`rounded-xl border p-5 text-left transition-all ${
-                      selectedTheme === option.id
-                        ? "border-primary/35 bg-primary/15 text-primary"
-                        : "border-border/50 bg-secondary/25 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <option.icon className="mb-4 h-6 w-6" />
-                    <span className="text-sm font-semibold">{option.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="divide-y divide-border/70">
+              <SettingRow title="Theme" description="Choose how AI Study Hub looks on this device">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    { id: "light", label: t("light"), icon: Sun },
+                    { id: "dark", label: t("dark"), icon: Moon },
+                    { id: "system", label: t("system"), icon: Smartphone },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setTheme(option.id)}
+                      className={`flex h-24 flex-col items-center justify-center gap-2 rounded-xl border text-sm font-medium transition-colors ${
+                        selectedTheme === option.id
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      }`}
+                    >
+                      <option.icon className="h-5 w-5" />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
             </div>
           )}
 
           {(activeTab === "billing" || activeTab === "help") && (
-            <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="glass-card rounded-xl p-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                  {activeTab === "billing" ? <CreditCard className="h-6 w-6" /> : <HelpCircle className="h-6 w-6" />}
+            <div className="divide-y divide-border/70">
+              <SettingRow
+                title={activeTab === "billing" ? t("billingSubscription") : t("helpSupport")}
+                description={t("comingSoon")}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {["Account", "Documents", "AI Assistant", "Workspace"].map((label) => (
+                    <div key={label} className="rounded-xl border border-border bg-background px-4 py-3">
+                      <p className="text-sm font-medium text-foreground">{label}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Ready for setup.</p>
+                    </div>
+                  ))}
                 </div>
-                <h2 className="mt-5 text-lg font-semibold text-foreground">
-                  {activeTab === "billing" ? t("billingSubscription") : t("helpSupport")}
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">{t("comingSoon")}</p>
-              </div>
-              <div className="grid gap-3">
-                {["Account", "Documents", "AI Assistant"].map((label) => (
-                  <div key={label} className="rounded-xl border border-border/50 bg-card/60 p-4">
-                    <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-xs text-muted-foreground">Ready for the next setup step.</p>
-                  </div>
-                ))}
-              </div>
+              </SettingRow>
             </div>
           )}
         </motion.main>
@@ -693,51 +743,71 @@ export default function SettingsPage() {
   )
 }
 
-function StatusPill({ active, activeText, inactiveText }: { active: boolean; activeText: string; inactiveText: string }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-        active ? "bg-primary/15 text-primary" : "bg-secondary/60 text-muted-foreground"
-      }`}
-    >
-      {active ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-      {active ? activeText : inactiveText}
-    </span>
-  )
-}
-
-function InfoTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/50 bg-secondary/25 p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-medium text-foreground">{value}</p>
-    </div>
-  )
-}
-
-function ActionPanel({
-  icon,
+function SettingRow({
   title,
   description,
   children,
+  danger = false,
 }: {
-  icon: ReactNode
   title: string
   description: string
   children: ReactNode
+  danger?: boolean
 }) {
   return (
-    <div className="glass-card rounded-xl p-5">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground">{title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        </div>
+    <section className="grid gap-5 py-9 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.25fr)] lg:items-start">
+      <div>
+        <h2 className={`text-lg font-semibold ${danger ? "text-destructive" : "text-foreground"}`}>{title}</h2>
+        <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
-      {children}
-    </div>
+      <div>{children}</div>
+    </section>
+  )
+}
+
+function Field({
+  label,
+  value,
+  placeholder,
+  readOnly,
+  className = "",
+}: {
+  label: string
+  value: string
+  placeholder?: string
+  readOnly?: boolean
+  className?: string
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="mb-2 block text-sm font-medium text-foreground">{label}</span>
+      <input
+        value={value}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        className="h-10 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20 read-only:text-muted-foreground"
+      />
+    </label>
+  )
+}
+
+function StatusPill({
+  active,
+  activeText,
+  inactiveText,
+}: {
+  active: boolean
+  activeText: string
+  inactiveText: string
+}) {
+  return (
+    <span
+      className={`inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-medium ${
+        active ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
+      }`}
+    >
+      {active ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+      {active ? activeText : inactiveText}
+    </span>
   )
 }
