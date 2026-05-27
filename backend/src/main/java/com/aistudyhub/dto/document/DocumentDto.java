@@ -9,6 +9,8 @@ public record DocumentDto(
         String ownerName,
         Long subjectId,
         String subjectName,
+        Long folderId,
+        String folderName,
         Long categoryId,
         String categoryName,
         String title,
