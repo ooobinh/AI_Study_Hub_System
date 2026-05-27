@@ -169,6 +169,7 @@ export default function SettingsPage() {
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const { theme, setTheme } = useTheme()
   const { user, updateUser } = useAuth()
+  const updateUserRef = useRef(updateUser)
   const { t } = useLanguage()
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
@@ -179,6 +180,10 @@ export default function SettingsPage() {
     { id: "billing", label: t("billing"), icon: CreditCard },
     { id: "help", label: t("help"), icon: HelpCircle },
   ]
+
+  useEffect(() => {
+    updateUserRef.current = updateUser
+  }, [updateUser])
 
   const loadAccount = useCallback(async () => {
     if (!user?.id) return
@@ -192,13 +197,15 @@ export default function SettingsPage() {
       const security = body as AccountSecurity
       setAccount(security)
       setNewEmail(security.email)
-      updateUser({ email: security.email })
+      if (security.email !== user.email) {
+        updateUserRef.current({ email: security.email })
+      }
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
       setIsAccountLoading(false)
     }
-  }, [updateUser, user?.id])
+  }, [user?.email, user?.id])
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
     if (!user?.id || !response.credential) {
