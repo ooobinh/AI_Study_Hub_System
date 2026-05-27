@@ -13,6 +13,7 @@ import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
 import com.aistudyhub.dto.auth.ResetPasswordRequest;
+import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -371,6 +372,27 @@ public class AuthService {
                 """, userMapper);
     }
 
+    public UserDto updateProfile(Long id, UpdateProfileRequest request) {
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET full_name = ?,
+                    university = ?,
+                    major = ?,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ? AND status <> 'DELETED'
+                """,
+                request.fullName().trim(),
+                blankToNull(request.university()),
+                blankToNull(request.major()),
+                id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return findById(id);
+    }
+
     public UserDto updateAvatar(Long id, String avatarUrl) {
         int updated = jdbcTemplate.update("""
                 UPDATE users
@@ -678,6 +700,13 @@ public class AuthService {
 
     private String normalizeEmail(String value) {
         return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void ensureAccountSecuritySchema() {
