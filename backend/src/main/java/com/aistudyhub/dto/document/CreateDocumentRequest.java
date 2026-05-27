@@ -16,6 +16,23 @@ public record CreateDocumentRequest(
         @Size(max = 255) String fileType,
         Long fileSize,
         Integer pageCount,
-        String visibility
+        String visibility,
+        Long folderId
 ) {
+    public CreateDocumentRequest(
+            Long ownerId,
+            Long subjectId,
+            Long categoryId,
+            String title,
+            String description,
+            String originalFileName,
+            String fileUrl,
+            String previewUrl,
+            String fileType,
+            Long fileSize,
+            Integer pageCount,
+            String visibility
+    ) {
+        this(ownerId, subjectId, categoryId, title, description, originalFileName, fileUrl, previewUrl, fileType, fileSize, pageCount, visibility, null);
+    }
 }
