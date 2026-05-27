@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface ForumPostDto {
@@ -499,10 +500,7 @@ export default function ForumPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-border/50 bg-secondary/20 py-14 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading forum...
-            </div>
+            <LogoLoader compact label="AI Study Hub" sublabel="Loading forum..." className="rounded-xl border border-border/50 bg-secondary/20" />
           ) : posts.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 p-8 text-center">
               <MessagesSquare className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
@@ -555,10 +553,7 @@ export default function ForumPage() {
           ) : (
             <div className="glass-card rounded-xl p-5">
               {isDetailLoading && !detail ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading post...
-                </div>
+                <LogoLoader compact label="AI Study Hub" sublabel="Loading post..." />
               ) : (
                 <div className="space-y-5">
                   <div className="flex items-start gap-4">

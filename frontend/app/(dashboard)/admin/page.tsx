@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   Users,
@@ -436,17 +437,13 @@ export default function AdminPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
-        Loading admin session...
-      </div>
+      <LogoLoader compact label="AI Study Hub" sublabel="Loading admin session..." />
     )
   }
 
   if (!isAdmin) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
-        Redirecting...
-      </div>
+      <LogoLoader compact label="AI Study Hub" sublabel="Redirecting..." />
     )
   }
 

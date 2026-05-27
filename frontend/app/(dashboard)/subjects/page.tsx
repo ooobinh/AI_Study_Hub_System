@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface SubjectDto {
@@ -291,10 +292,7 @@ export default function SubjectsPage() {
       </motion.div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading subjects...
-        </div>
+        <LogoLoader compact label="AI Study Hub" sublabel="Loading subjects..." />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
           <motion.div variants={item} className="space-y-3">
