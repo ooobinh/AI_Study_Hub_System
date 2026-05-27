@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -31,8 +33,8 @@ public class ChatService {
                     rs.wasNull() ? null : documentId,
                     rs.getString("session_title"),
                     rs.getString("last_message"),
-                    rs.getTimestamp("created_at").toLocalDateTime(),
-                    rs.getTimestamp("updated_at").toLocalDateTime()
+                    toLocalDateTime(rs.getTimestamp("created_at")),
+                    toLocalDateTime(rs.getTimestamp("updated_at"))
             );
         }
     };
@@ -43,7 +45,7 @@ public class ChatService {
             rs.getString("sender"),
             rs.getString("message_text"),
             rs.getString("ai_model"),
-            rs.getTimestamp("created_at").toLocalDateTime()
+            toLocalDateTime(rs.getTimestamp("created_at"))
     );
 
     public ChatService(JdbcTemplate jdbcTemplate, GeminiService geminiService, DocumentAiService documentAiService) {
@@ -75,8 +77,8 @@ public class ChatService {
                 : request.sessionTitle();
 
         jdbcTemplate.update("""
-                INSERT INTO chat_sessions (user_id, document_id, session_title)
-                VALUES (?, ?, ?)
+                INSERT INTO chat_sessions (user_id, document_id, session_title, created_at, updated_at)
+                VALUES (?, ?, ?, SYSDATETIME(), SYSDATETIME())
                 """, request.userId(), request.documentId(), title);
 
         Long id = jdbcTemplate.query("""
@@ -118,8 +120,8 @@ public class ChatService {
     public ChatMessageDto sendUserMessage(Long sessionId, SendMessageRequest request) {
         findSession(sessionId);
         jdbcTemplate.update("""
-                INSERT INTO chat_messages (session_id, sender, message_text, ai_model)
-                VALUES (?, 'USER', ?, NULL)
+                INSERT INTO chat_messages (session_id, sender, message_text, ai_model, created_at)
+                VALUES (?, 'USER', ?, NULL, SYSDATETIME())
                 """, sessionId, request.messageText());
         touchSession(sessionId);
         return latestMessage(sessionId);
@@ -129,8 +131,8 @@ public class ChatService {
     public ChatMessageDto addAiMessage(Long sessionId, SendMessageRequest request) {
         findSession(sessionId);
         jdbcTemplate.update("""
-                INSERT INTO chat_messages (session_id, sender, message_text, ai_model)
-                VALUES (?, 'AI', ?, ?)
+                INSERT INTO chat_messages (session_id, sender, message_text, ai_model, created_at)
+                VALUES (?, 'AI', ?, ?, SYSDATETIME())
                 """, sessionId, request.messageText(), request.aiModel());
         touchSession(sessionId);
         return latestMessage(sessionId);
@@ -153,8 +155,8 @@ public class ChatService {
         }
 
         jdbcTemplate.update("""
-                INSERT INTO chat_messages (session_id, sender, message_text, ai_model)
-                VALUES (?, 'AI', ?, ?)
+                INSERT INTO chat_messages (session_id, sender, message_text, ai_model, created_at)
+                VALUES (?, 'AI', ?, ?, SYSDATETIME())
                 """, sessionId, answer, model);
         touchSession(sessionId);
         return latestMessage(sessionId);
@@ -181,5 +183,9 @@ public class ChatService {
                 WHERE session_id = ?
                 ORDER BY created_at DESC
                 """, String.class, sessionId);
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

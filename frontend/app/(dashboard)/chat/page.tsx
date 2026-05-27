@@ -150,7 +150,10 @@ export default function ChatPage() {
         sessionTitle: firstMessage.slice(0, 60) || t("newStudyChat"),
       }),
     })
-    if (!response.ok) throw new Error(t("createChatFailed"))
+    if (!response.ok) {
+      const body = await response.json().catch(() => null)
+      throw new Error(body?.message || t("createChatFailed"))
+    }
     const session = await response.json() as ChatSessionDto
     setSelectedChat(String(session.id))
     setChatHistory(prev => [{
