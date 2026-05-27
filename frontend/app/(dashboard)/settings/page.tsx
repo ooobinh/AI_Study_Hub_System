@@ -94,6 +94,11 @@ interface MessageResponse {
   message: string
 }
 
+type SectionFeedbackState = Record<string, {
+  type: "success" | "error"
+  message: string
+}>
+
 const tabIds = ["account", "notifications", "appearance", "billing", "help"]
 const legacyTabs: Record<string, string> = {
   profile: "account",
@@ -157,13 +162,18 @@ export default function SettingsPage() {
   const [account, setAccount] = useState<AccountSecurity | null>(null)
   const [isAccountLoading, setIsAccountLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState("")
-  const [notice, setNotice] = useState("")
-  const [error, setError] = useState("")
+  const [feedback, setFeedback] = useState<SectionFeedbackState>({})
   const [newEmail, setNewEmail] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
+  const [profileForm, setProfileForm] = useState({
+    firstName: "",
+    lastName: "",
+    major: "",
+    university: "",
+  })
   const [googleReady, setGoogleReady] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
@@ -185,6 +195,30 @@ export default function SettingsPage() {
     updateUserRef.current = updateUser
   }, [updateUser])
 
+  const setSectionFeedback = (section: string, type: "success" | "error", message: string) => {
+    setFeedback((current) => ({ ...current, [section]: { type, message } }))
+  }
+
+  const clearSectionFeedback = (section: string) => {
+    setFeedback((current) => {
+      const next = { ...current }
+      delete next[section]
+      return next
+    })
+  }
+
+  const clearAllFeedback = () => setFeedback({})
+
+  useEffect(() => {
+    const nextName = splitName(user?.name)
+    setProfileForm({
+      firstName: nextName.firstName,
+      lastName: nextName.lastName,
+      major: user?.major || "",
+      university: user?.university || "",
+    })
+  }, [user?.id, user?.major, user?.name, user?.university])
+
   const loadAccount = useCallback(async () => {
     if (!user?.id) return
     setIsAccountLoading(true)
@@ -201,7 +235,7 @@ export default function SettingsPage() {
         updateUserRef.current({ email: security.email })
       }
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setSectionFeedback("account", "error", getNetworkErrorMessage(err))
     } finally {
       setIsAccountLoading(false)
     }
@@ -209,22 +243,21 @@ export default function SettingsPage() {
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
     if (!user?.id || !response.credential) {
-      setError("Google did not return a login token.")
+      setSectionFeedback("google", "error", "Google did not return a login token.")
       return
     }
 
     setActionLoading("google")
-    setError("")
-    setNotice("")
+    clearSectionFeedback("google")
     try {
       const linked = await postJson<AccountSecurity>("/api/auth/account/link-google", {
         userId: Number(user.id),
         credential: response.credential,
       })
       setAccount(linked)
-      setNotice("Google account linked successfully.")
+      setSectionFeedback("google", "success", "Google account linked successfully.")
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setSectionFeedback("google", "error", getNetworkErrorMessage(err))
     } finally {
       setActionLoading("")
     }
@@ -286,29 +319,27 @@ export default function SettingsPage() {
     script.async = true
     script.defer = true
     script.onload = renderGoogleButton
-    script.onerror = () => setError("Could not load Google sign-in.")
+    script.onerror = () => setSectionFeedback("google", "error", "Could not load Google sign-in.")
     document.head.appendChild(script)
   }, [account?.googleLinked, activeTab, googleClientId, handleGoogleCredential])
 
   const selectTab = (tab: string) => {
     setActiveTab(tab)
-    setError("")
-    setNotice("")
+    clearAllFeedback()
     const nextUrl = tab === "account" ? "/settings" : `/settings?tab=${tab}`
     window.history.replaceState(null, "", nextUrl)
   }
 
   const runAction = async (key: string, action: () => Promise<MessageResponse>) => {
     setActionLoading(key)
-    setError("")
-    setNotice("")
+    clearSectionFeedback(key)
     try {
       const response = await action()
-      setNotice(response.message)
+      setSectionFeedback(key, "success", response.message)
       await loadAccount()
       return true
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setSectionFeedback(key, "error", getNetworkErrorMessage(err))
       return false
     } finally {
       setActionLoading("")
@@ -322,8 +353,7 @@ export default function SettingsPage() {
     const formData = new FormData()
     formData.append("file", file)
     setActionLoading("avatar")
-    setError("")
-    setNotice("")
+    clearSectionFeedback("avatar")
     try {
       const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "POST",
@@ -335,9 +365,9 @@ export default function SettingsPage() {
       }
       const nextUser = body as BackendUser
       updateUser({ avatarUrl: nextUser.avatarUrl })
-      setNotice("Profile picture updated.")
+      setSectionFeedback("avatar", "success", "Profile picture updated.")
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setSectionFeedback("avatar", "error", getNetworkErrorMessage(err))
     } finally {
       setActionLoading("")
       event.target.value = ""
@@ -347,8 +377,7 @@ export default function SettingsPage() {
   const deleteAvatar = async () => {
     if (!user?.id) return
     setActionLoading("avatar-delete")
-    setError("")
-    setNotice("")
+    clearSectionFeedback("avatar")
     try {
       const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "DELETE",
@@ -358,9 +387,9 @@ export default function SettingsPage() {
         throw new Error(body?.message || "Could not delete avatar")
       }
       updateUser({ avatarUrl: null })
-      setNotice("Profile picture removed.")
+      setSectionFeedback("avatar", "success", "Profile picture removed.")
     } catch (err) {
-      setError(getNetworkErrorMessage(err))
+      setSectionFeedback("avatar", "error", getNetworkErrorMessage(err))
     } finally {
       setActionLoading("")
     }
@@ -373,12 +402,65 @@ export default function SettingsPage() {
     }))
   }
 
+  const resetProfileForm = () => {
+    const nextName = splitName(user?.name)
+    setProfileForm({
+      firstName: nextName.firstName,
+      lastName: nextName.lastName,
+      major: user?.major || "",
+      university: user?.university || "",
+    })
+    clearSectionFeedback("profile")
+  }
+
+  const saveProfile = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!user?.id) return
+
+    const fullName = `${profileForm.firstName} ${profileForm.lastName}`.replace(/\s+/g, " ").trim()
+    if (!fullName) {
+      setSectionFeedback("profile", "error", "Please enter your name.")
+      return
+    }
+
+    setActionLoading("profile")
+    clearSectionFeedback("profile")
+    try {
+      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          university: profileForm.university.trim() || null,
+          major: profileForm.major.trim() || null,
+        }),
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.message || "Could not update profile")
+      }
+
+      const nextUser = body as BackendUser
+      updateUser({
+        name: nextUser.fullName,
+        avatarUrl: nextUser.avatarUrl,
+        university: nextUser.university,
+        major: nextUser.major,
+      })
+      setSectionFeedback("profile", "success", "Personal information updated.")
+    } catch (err) {
+      setSectionFeedback("profile", "error", getNetworkErrorMessage(err))
+    } finally {
+      setActionLoading("")
+    }
+  }
+
   const requestEmailChange = (event: FormEvent) => {
     event.preventDefault()
     if (!user?.id) return
     const email = newEmail.trim()
     if (!isValidEmail(email)) {
-      setError("Please enter a valid email address.")
+      setSectionFeedback("change-email", "error", "Please enter a valid email address.")
       return
     }
     runAction("change-email", () => postJson<MessageResponse>("/api/auth/account/change-email", {
@@ -391,11 +473,11 @@ export default function SettingsPage() {
     event.preventDefault()
     if (!user?.id) return
     if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters.")
+      setSectionFeedback("password", "error", "New password must be at least 6 characters.")
       return
     }
     if (newPassword !== confirmPassword) {
-      setError("New password confirmation does not match.")
+      setSectionFeedback("password", "error", "New password confirmation does not match.")
       return
     }
     runAction("password", () => postJson<MessageResponse>("/api/auth/account/change-password", {
@@ -415,7 +497,7 @@ export default function SettingsPage() {
     event.preventDefault()
     if (!user?.id || !account) return
     if (deleteConfirmation.trim().toLowerCase() !== account.email.toLowerCase()) {
-      setError("Type your current email exactly to request account deletion.")
+      setSectionFeedback("delete", "error", "Type your current email exactly to request account deletion.")
       return
     }
     runAction("delete", () => postJson<MessageResponse>("/api/auth/account/delete-request", {
@@ -429,7 +511,7 @@ export default function SettingsPage() {
 
   const linkGoogle = () => {
     if (!googleClientId) {
-      setError("Google login is not configured yet.")
+      setSectionFeedback("google", "error", "Google login is not configured yet.")
       return
     }
     window.google?.accounts.id.prompt()
@@ -468,60 +550,49 @@ export default function SettingsPage() {
         </motion.aside>
 
         <motion.main variants={item} className="min-w-0">
-          {(notice || error) && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
-                error
-                  ? "border-destructive/30 bg-destructive/10 text-destructive"
-                  : "border-primary/30 bg-primary/10 text-primary"
-              }`}
-            >
-              {error || notice}
-            </motion.div>
-          )}
-
           {activeTab === "account" && (
             <div className="divide-y divide-border/70">
               <SettingRow
                 title="Profile picture"
                 description="Accepted files JPG, PNG, SVG"
               >
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml"
-                    onChange={uploadAvatar}
-                    className="hidden"
-                  />
-                  <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-lg font-semibold text-primary">
-                    {user?.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      initials
-                    )}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/svg+xml"
+                      onChange={uploadAvatar}
+                      className="hidden"
+                    />
+                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-lg font-semibold text-primary">
+                      {user?.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        initials
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={actionLoading === "avatar"}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm hover:bg-secondary disabled:opacity-60"
+                    >
+                      {actionLoading === "avatar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      Upload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deleteAvatar}
+                      disabled={!user?.avatarUrl || actionLoading === "avatar-delete"}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-destructive/30 bg-background px-4 text-sm font-medium text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      {actionLoading === "avatar-delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      Delete
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => avatarInputRef.current?.click()}
-                    disabled={actionLoading === "avatar"}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm hover:bg-secondary disabled:opacity-60"
-                  >
-                    {actionLoading === "avatar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    Upload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={deleteAvatar}
-                    disabled={!user?.avatarUrl || actionLoading === "avatar-delete"}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-destructive/30 bg-background px-4 text-sm font-medium text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-50"
-                  >
-                    {actionLoading === "avatar-delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    Delete
-                  </button>
+                  <SectionFeedback feedback={feedback.avatar} />
                 </div>
               </SettingRow>
 
@@ -529,13 +600,57 @@ export default function SettingsPage() {
                 title="Personal Information"
                 description="Shown on your public profile"
               >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="First name" value={firstName} readOnly />
-                  <Field label="Last name" value={lastName} readOnly placeholder="Last name" />
-                  <Field label="Email Address" value={account?.email || user?.email || ""} readOnly className="md:col-span-2" />
-                  <Field label="Major" value={user?.major || ""} readOnly placeholder="Not set" />
-                  <Field label="University" value={user?.university || ""} readOnly placeholder="Not set" />
-                </div>
+                <form onSubmit={saveProfile} className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field
+                      label="First name"
+                      value={profileForm.firstName}
+                      onChange={(value) => setProfileForm((current) => ({ ...current, firstName: value }))}
+                    />
+                    <Field
+                      label="Last name"
+                      value={profileForm.lastName}
+                      placeholder="Last name"
+                      onChange={(value) => setProfileForm((current) => ({ ...current, lastName: value }))}
+                    />
+                    <Field
+                      label="Email Address"
+                      value={account?.email || user?.email || ""}
+                      readOnly
+                      className="md:col-span-2"
+                    />
+                    <Field
+                      label="Major"
+                      value={profileForm.major}
+                      placeholder="Not set"
+                      onChange={(value) => setProfileForm((current) => ({ ...current, major: value }))}
+                    />
+                    <Field
+                      label="University"
+                      value={profileForm.university}
+                      placeholder="Not set"
+                      onChange={(value) => setProfileForm((current) => ({ ...current, university: value }))}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={resetProfileForm}
+                      className="inline-flex h-10 items-center rounded-xl border border-border bg-background px-5 text-sm font-medium text-muted-foreground shadow-sm hover:bg-secondary hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={actionLoading === "profile"}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-medium text-background disabled:opacity-60"
+                    >
+                      {actionLoading === "profile" && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Save
+                    </button>
+                  </div>
+                  <SectionFeedback feedback={feedback.profile} />
+                </form>
               </SettingRow>
 
               <SettingRow
@@ -554,27 +669,31 @@ export default function SettingsPage() {
                     Send email
                   </button>
                 </div>
+                <SectionFeedback feedback={feedback["verify-email"]} />
               </SettingRow>
 
               <SettingRow
                 title="Change email"
                 description="A confirmation link will be sent to the new email"
               >
-                <form onSubmit={requestEmailChange} className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  <button
-                    type="submit"
-                    disabled={actionLoading === "change-email"}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-foreground px-4 text-sm font-medium text-background disabled:opacity-60"
-                  >
-                    {actionLoading === "change-email" && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Confirm
-                  </button>
+                <form onSubmit={requestEmailChange} className="space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(event) => setNewEmail(event.target.value)}
+                      className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <button
+                      type="submit"
+                      disabled={actionLoading === "change-email"}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-foreground px-4 text-sm font-medium text-background disabled:opacity-60"
+                    >
+                      {actionLoading === "change-email" && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Confirm
+                    </button>
+                  </div>
+                  <SectionFeedback feedback={feedback["change-email"]} />
                 </form>
               </SettingRow>
 
@@ -602,6 +721,7 @@ export default function SettingsPage() {
                     </button>
                   )}
                 </div>
+                <SectionFeedback feedback={feedback.google} />
               </SettingRow>
 
               <SettingRow
@@ -642,6 +762,7 @@ export default function SettingsPage() {
                       Reset Password
                     </button>
                   </div>
+                  <SectionFeedback feedback={feedback.password} />
                 </form>
               </SettingRow>
 
@@ -668,6 +789,7 @@ export default function SettingsPage() {
                       Send delete link
                     </button>
                   </div>
+                  <SectionFeedback feedback={feedback.delete} />
                 </form>
               </SettingRow>
 
@@ -677,6 +799,7 @@ export default function SettingsPage() {
                   Loading account details...
                 </div>
               )}
+              <SectionFeedback feedback={feedback.account} />
             </div>
           )}
 
@@ -777,12 +900,14 @@ function Field({
   value,
   placeholder,
   readOnly,
+  onChange,
   className = "",
 }: {
   label: string
   value: string
   placeholder?: string
   readOnly?: boolean
+  onChange?: (value: string) => void
   className?: string
 }) {
   return (
@@ -792,9 +917,31 @@ function Field({
         value={value}
         placeholder={placeholder}
         readOnly={readOnly}
+        onChange={(event) => onChange?.(event.target.value)}
         className="h-10 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20 read-only:text-muted-foreground"
       />
     </label>
+  )
+}
+
+function SectionFeedback({ feedback }: { feedback?: { type: "success" | "error"; message: string } }) {
+  if (!feedback) {
+    return null
+  }
+
+  const isError = feedback.type === "error"
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`rounded-xl border px-3 py-2 text-sm ${
+        isError
+          ? "border-destructive/30 bg-destructive/10 text-destructive"
+          : "border-primary/30 bg-primary/10 text-primary"
+      }`}
+    >
+      {feedback.message}
+    </motion.div>
   )
 }
 
