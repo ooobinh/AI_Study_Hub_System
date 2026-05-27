@@ -117,35 +117,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Pro Banner */}
-      <AnimatePresence mode="wait">
-        {!isCollapsed && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="mx-3 mb-4 p-4 rounded-xl glass-card"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-4 h-4 text-accent" />
-              <span className="text-sm font-medium text-foreground">{t("upgrade")}</span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              {t("unlockFeatures")}
-            </p>
-            <Link href="/settings?tab=billing" onClick={() => setIsMobileOpen(false)}>
-              <motion.div
-                className="w-full py-2 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium text-center"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                {t("upgradeNow")}
-              </motion.div>
-            </Link>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Collapse Button */}
       <div className="hidden md:flex items-center justify-center p-3 border-t border-border/50">
         <motion.button
