@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   DropdownMenu,
@@ -690,7 +691,7 @@ export default function DocumentsPage() {
       </motion.div>
 
       {isLoading ? (
-        <div className="py-14 text-center text-sm text-muted-foreground">{t("loadingDocuments")}</div>
+        <LogoLoader compact label="AI Study Hub" sublabel={t("loadingDocuments")} />
       ) : viewMode === "grid" ? (
         <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleFolders.map((folder) => (

@@ -13,6 +13,7 @@ import {
 import { useTheme } from "next-themes"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import { isValidEmail } from "@/lib/validation"
 import {
@@ -794,10 +795,7 @@ export default function SettingsPage() {
               </SettingRow>
 
               {isAccountLoading && (
-                <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading account details...
-                </div>
+                <LogoLoader compact label="AI Study Hub" sublabel="Loading account details..." />
               )}
               <SectionFeedback feedback={feedback.account} />
             </div>

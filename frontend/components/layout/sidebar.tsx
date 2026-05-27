@@ -52,7 +52,7 @@ export function Sidebar() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-6 border-b border-border/50">
+      <div className="flex items-center gap-3 px-4 py-6">
         <motion.div
           className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/20 glow-primary"
           whileHover={{ scale: 1.05 }}
