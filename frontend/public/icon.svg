@@ -1,12 +1,18 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="44" fill="#D7FBFB"/>
-  <rect x="18" y="18" width="144" height="144" rx="34" fill="#BDF5F5"/>
-  <circle cx="91" cy="89" r="52" fill="#EFFFFF" fill-opacity="0.58"/>
-  <g transform="translate(47 45) scale(3.6)" stroke="#06B6D4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063L2.365 12.48a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-    <path d="M20 3v4"/>
-    <path d="M22 5h-4"/>
-    <path d="M4 17v2"/>
-    <path d="M5 18H3"/>
+  <g transform="translate(18 16) scale(6.05)" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#0F172A" stroke-opacity="0.88" stroke-width="3.8">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063L2.365 12.48a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+      <path d="M20 3v4"/>
+      <path d="M22 5h-4"/>
+      <path d="M4 17v2"/>
+      <path d="M5 18H3"/>
+    </g>
+    <g stroke="#22D3EE" stroke-width="2.15">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063L2.365 12.48a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+      <path d="M20 3v4"/>
+      <path d="M22 5h-4"/>
+      <path d="M4 17v2"/>
+      <path d="M5 18H3"/>
+    </g>
   </g>
 </svg>
