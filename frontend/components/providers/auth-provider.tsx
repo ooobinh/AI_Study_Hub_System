@@ -21,6 +21,7 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   loginWithGoogleCredential: (credential: string) => Promise<void>
+  loginWithGithubCode: (code: string, redirectUri: string) => Promise<void>
   register: (fullName: string, email: string, password: string) => Promise<void>
   updateUser: (nextUser: Partial<User>) => void
   logout: () => void
@@ -113,6 +114,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('aiStudyHubToken', data.token)
   }
 
+  const loginWithGithubCode = async (code: string, redirectUri: string) => {
+    const data = await requestAuth('/api/auth/github', { code, redirectUri })
+    const newUser = mapUser(data.user)
+
+    setUser(newUser)
+    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
+    localStorage.setItem('aiStudyHubToken', data.token)
+  }
+
   const register = async (fullName: string, email: string, password: string) => {
     const data = await requestAuth('/api/auth/register', { fullName, email, password })
     const newUser = mapUser(data.user)
@@ -140,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, loginWithGithubCode, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

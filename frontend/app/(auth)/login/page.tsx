@@ -61,6 +61,7 @@ export default function AuthPage() {
   const { login, loginWithGoogleCredential, register } = useAuth()
   const { t } = useLanguage()
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+  const githubClientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
   const emailIsInvalid = emailTouched && email.trim().length > 0 && !isValidEmail(email)
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
@@ -88,6 +89,20 @@ export default function AuthPage() {
       return
     }
     window.google?.accounts.id.prompt()
+  }
+
+  const handleGithubLogin = () => {
+    if (!githubClientId) {
+      setError("GitHub login is not configured. Add NEXT_PUBLIC_GITHUB_CLIENT_ID in frontend and GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET in backend.")
+      return
+    }
+
+    const redirectUri = `${window.location.origin}/github/callback`
+    const state = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+    localStorage.setItem("aiStudyHubGithubOAuthState", state)
+    setError("")
+    setMessage("")
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(githubClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent("read:user user:email")}&state=${encodeURIComponent(state)}`
   }
 
   useEffect(() => {
@@ -537,6 +552,8 @@ export default function AuthPage() {
                 </motion.div>
                 <motion.button
                   type="button"
+                  onClick={handleGithubLogin}
+                  disabled={isSubmitting}
                   className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/50 bg-card/70 text-foreground shadow-sm transition-colors hover:border-primary/30 hover:bg-secondary/70"
                   aria-label="Continue with GitHub"
                   title="Continue with GitHub"
