@@ -87,6 +87,9 @@ type FileTypeFilter = "all" | "pdf" | "word" | "powerpoint" | "other"
 type DateRangeFilter = "all" | "today" | "7d" | "30d"
 type SortOrder = "newest" | "oldest" | "name" | "size"
 
+const MAX_UPLOAD_FILES = 10
+const SUPPORTED_UPLOAD_LABEL = "PDF, DOC, DOCX, PPT, PPTX"
+
 async function uploadFileToBackend(file: File, ownerId: string, folderId?: number | null): Promise<DocumentDto> {
   const formData = new FormData()
   formData.append("ownerId", ownerId)
@@ -179,11 +182,35 @@ function matchesDateRange(value: string, range: DateRangeFilter) {
   return now - created <= days * 24 * 60 * 60 * 1000
 }
 
-function fileAccent(kind: FileTypeFilter) {
-  if (kind === "pdf") return "bg-rose-600"
-  if (kind === "word") return "bg-blue-600"
-  if (kind === "powerpoint") return "bg-orange-600"
-  return "bg-slate-600"
+function fileBadgeClasses(kind: FileTypeFilter) {
+  if (kind === "pdf") return "bg-red-600 text-white shadow-red-600/20"
+  if (kind === "word") return "bg-blue-600 text-white shadow-blue-600/20"
+  if (kind === "powerpoint") return "bg-orange-600 text-white shadow-orange-600/20"
+  return "bg-slate-600 text-white shadow-slate-600/20"
+}
+
+function DocumentFileIcon({
+  fileName,
+  kind,
+  className = "",
+}: {
+  fileName: string
+  kind: FileTypeFilter
+  className?: string
+}) {
+  const extension = getExtension(fileName)
+
+  return (
+    <div className={`relative flex h-14 w-12 shrink-0 items-center justify-center ${className}`}>
+      <div className="absolute inset-x-[5px] inset-y-0 rounded-[5px] border border-slate-300 bg-white shadow-sm">
+        <span className="absolute right-0 top-0 h-0 w-0 border-b-[13px] border-l-[13px] border-b-slate-200 border-l-transparent" />
+        <span className="absolute right-[-1px] top-[-1px] h-0 w-0 border-b-[15px] border-l-[15px] border-b-slate-300/80 border-l-transparent opacity-35" />
+      </div>
+      <span className={`relative mt-4 min-w-11 rounded-[3px] px-1.5 py-0.5 text-center text-[10px] font-bold leading-none shadow-md ${fileBadgeClasses(kind)}`}>
+        {extension}
+      </span>
+    </div>
+  )
 }
 
 export default function DocumentsPage() {
@@ -249,6 +276,12 @@ export default function DocumentsPage() {
     last7Days: language === "vi" ? "7 ngay" : "Last 7 days",
     last30Days: language === "vi" ? "30 ngay" : "Last 30 days",
     folderAlreadyOpen: language === "vi" ? "Dang xem folder nay" : "Current folder",
+    uploadRules: language === "vi"
+      ? `Ho tro ${SUPPORTED_UPLOAD_LABEL}. Toi da ${MAX_UPLOAD_FILES} tep moi lan upload.`
+      : `Supports ${SUPPORTED_UPLOAD_LABEL}. Up to ${MAX_UPLOAD_FILES} files per upload.`,
+    tooManyFiles: language === "vi"
+      ? `Upload khong hop le. Ho tro ${SUPPORTED_UPLOAD_LABEL}, toi da ${MAX_UPLOAD_FILES} tep/lan.`
+      : `Invalid upload. Supports ${SUPPORTED_UPLOAD_LABEL}, up to ${MAX_UPLOAD_FILES} files at once.`,
   }), [language, t])
 
   const selectedFolder = useMemo(() => {
@@ -338,6 +371,10 @@ export default function DocumentsPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    maxFiles: MAX_UPLOAD_FILES,
+    onDropRejected: () => {
+      setError(copy.tooManyFiles)
+    },
     accept: {
       "application/pdf": [".pdf"],
       "application/msword": [".doc"],
@@ -552,24 +589,30 @@ export default function DocumentsPage() {
             <span>{copy.uploadTo}: {uploadTargetName}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setCreateFolderOpen(true)}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border border-border/70 bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-secondary/70"
-          >
-            <FolderPlus className="h-4 w-4 text-muted-foreground" />
-            {copy.createFolder}
-          </button>
-          <div
-            {...uploadRootProps}
-            className={`inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all ${
-              isDragActive ? "bg-primary/80 ring-4 ring-primary/20" : "bg-foreground hover:bg-foreground/90"
-            }`}
-          >
-            <input {...getInputProps()} />
-            <Upload className="h-4 w-4" />
-            {t("upload")}
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setCreateFolderOpen(true)}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-border/70 bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-secondary/70"
+            >
+              <FolderPlus className="h-4 w-4 text-muted-foreground" />
+              {copy.createFolder}
+            </button>
+            <div
+              {...uploadRootProps}
+              className={`inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all ${
+                isDragActive ? "bg-primary/80 ring-4 ring-primary/20" : "bg-foreground hover:bg-foreground/90"
+              }`}
+            >
+              <input {...getInputProps()} />
+              <Upload className="h-4 w-4" />
+              {t("upload")}
+            </div>
+          </div>
+          <div className="flex max-w-sm items-start gap-2 rounded-xl border border-border/60 bg-secondary/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            <span>{copy.uploadRules}</span>
           </div>
         </div>
       </motion.div>
@@ -727,9 +770,9 @@ export default function DocumentsPage() {
                   <button
                     type="button"
                     onClick={() => viewDocument(doc)}
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl ${fileAccent(kind)} text-white`}
+                    className="shrink-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
                   >
-                    <FileText className="h-6 w-6" />
+                    <DocumentFileIcon fileName={doc.originalFileName} kind={kind} />
                   </button>
                   <div className="min-w-0 flex-1">
                     <button
@@ -840,9 +883,7 @@ export default function DocumentsPage() {
                   onClick={(event) => event.stopPropagation()}
                 />
                 <div className="flex min-w-0 items-center gap-4">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${fileAccent(kind)} text-white shadow-sm`}>
-                    <FileText className="h-6 w-6" />
-                  </div>
+                  <DocumentFileIcon fileName={doc.originalFileName} kind={kind} />
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-foreground">{doc.title || doc.originalFileName}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
