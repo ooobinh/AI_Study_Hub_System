@@ -134,27 +134,32 @@ function formatFileSize(bytes: number | null | undefined, unknownSize: string) {
   return `${size.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`
 }
 
-function formatClock(value: string | null | undefined) {
-  if (!value) return ""
-  return new Intl.DateTimeFormat("en", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value))
-}
-
-function formatRelativeTime(value: string | null | undefined) {
+function formatExactDateTime(value: string | null | undefined, language: "en" | "vi") {
   if (!value) return ""
   const date = new Date(value)
-  const diff = Date.now() - date.getTime()
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatRelativeTime(value: string | null | undefined, now: number, language: "en" | "vi") {
+  if (!value) return ""
+  const date = new Date(value)
+  const diff = now - date.getTime()
   if (Number.isNaN(diff)) return ""
   const minutes = Math.max(0, Math.floor(diff / 60000))
-  if (minutes < 1) return "just now"
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+  if (minutes < 1) return language === "vi" ? "vua xong" : "just now"
+  if (minutes < 60) return language === "vi" ? `${minutes} phut truoc` : `${minutes} minute${minutes === 1 ? "" : "s"} ago`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `about ${hours} hour${hours === 1 ? "" : "s"} ago`
+  if (hours < 24) return language === "vi" ? `${hours} gio truoc` : `about ${hours} hour${hours === 1 ? "" : "s"} ago`
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date)
+  if (days < 7) return language === "vi" ? `${days} ngay truoc` : `${days} day${days === 1 ? "" : "s"} ago`
+  return new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", { month: "short", day: "numeric", year: "numeric" }).format(date)
 }
 
 function getExtension(fileName: string) {
@@ -227,6 +232,7 @@ export default function DocumentsPage() {
   const [uploadMessage, setUploadMessage] = useState("")
   const [documents, setDocuments] = useState<DocumentDto[]>([])
   const [folders, setFolders] = useState<DocumentFolderDto[]>([])
+  const [now, setNow] = useState(() => Date.now())
   const [availableSubjects, setAvailableSubjects] = useState<SubjectDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
@@ -291,6 +297,30 @@ export default function DocumentsPage() {
 
   const uploadFolderId = selectedFolder ? selectedFolder.id : null
   const uploadTargetName = selectedFolder ? selectedFolder.name : copy.outsideFolder
+  const folderOptions = useMemo(() => [
+    { value: "all", label: copy.allFolders },
+    { value: "root", label: copy.outsideFolder },
+    ...folders.map((folder) => ({ value: String(folder.id), label: folder.name })),
+  ], [copy.allFolders, copy.outsideFolder, folders])
+  const fileTypeOptions = useMemo(() => [
+    { value: "all", label: copy.fileType },
+    { value: "pdf", label: "PDF" },
+    { value: "word", label: "Word" },
+    { value: "powerpoint", label: "PowerPoint" },
+    { value: "other", label: "Other" },
+  ], [copy.fileType])
+  const dateRangeOptions = useMemo(() => [
+    { value: "all", label: copy.dateRange },
+    { value: "today", label: copy.today },
+    { value: "7d", label: copy.last7Days },
+    { value: "30d", label: copy.last30Days },
+  ], [copy.dateRange, copy.last30Days, copy.last7Days, copy.today])
+  const sortOptions = useMemo(() => [
+    { value: "newest", label: copy.newest },
+    { value: "oldest", label: copy.oldest },
+    { value: "name", label: copy.name },
+    { value: "size", label: copy.largest },
+  ], [copy.largest, copy.name, copy.newest, copy.oldest])
 
   const loadDocuments = useCallback(async () => {
     if (!user) return
@@ -316,7 +346,10 @@ export default function DocumentsPage() {
       const data = await documentsResponse.json() as DocumentDto[]
       const subjectsData = await subjectsResponse.json() as SubjectDto[]
       const folderData = await foldersResponse.json() as DocumentFolderDto[]
-      setDocuments(data)
+      const personalDocuments = user.roles.includes("ADMIN")
+        ? data
+        : data.filter((doc) => String(doc.ownerId) === user.id)
+      setDocuments(personalDocuments)
       setAvailableSubjects(subjectsData)
       setFolders(folderData)
     } catch (err) {
@@ -329,6 +362,11 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadDocuments()
   }, [loadDocuments])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!user || acceptedFiles.length === 0) return
@@ -657,69 +695,40 @@ export default function DocumentsPage() {
               />
             </label>
 
-            <div className="relative">
-              <Folder className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <select
-                value={selectedFolderId}
-                onChange={(event) => setSelectedFolderId(event.target.value)}
-                className="h-11 min-w-[170px] appearance-none rounded-xl border border-border/70 bg-background pl-11 pr-9 text-sm font-medium text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
-              >
-                <option value="all">{copy.allFolders}</option>
-                <option value="root">{copy.outsideFolder}</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>{folder.name}</option>
-                ))}
-              </select>
-            </div>
+            <FilterDropdown
+              value={selectedFolderId}
+              options={folderOptions}
+              onChange={setSelectedFolderId}
+              icon={<Folder className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[180px]"
+            />
 
-            <div className="relative">
-              <FileText className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <select
-                value={fileTypeFilter}
-                onChange={(event) => setFileTypeFilter(event.target.value as FileTypeFilter)}
-                className="h-11 min-w-[150px] appearance-none rounded-xl border border-border/70 bg-background pl-11 pr-9 text-sm font-medium text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
-              >
-                <option value="all">{copy.fileType}</option>
-                <option value="pdf">PDF</option>
-                <option value="word">Word</option>
-                <option value="powerpoint">PowerPoint</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+            <FilterDropdown
+              value={fileTypeFilter}
+              options={fileTypeOptions}
+              onChange={(value) => setFileTypeFilter(value as FileTypeFilter)}
+              icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[150px]"
+            />
 
-            <div className="relative">
-              <Calendar className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <select
-                value={dateRange}
-                onChange={(event) => setDateRange(event.target.value as DateRangeFilter)}
-                className="h-11 min-w-[160px] appearance-none rounded-xl border border-border/70 bg-background pl-11 pr-9 text-sm font-medium text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
-              >
-                <option value="all">{copy.dateRange}</option>
-                <option value="today">{copy.today}</option>
-                <option value="7d">{copy.last7Days}</option>
-                <option value="30d">{copy.last30Days}</option>
-              </select>
-            </div>
+            <FilterDropdown
+              value={dateRange}
+              options={dateRangeOptions}
+              onChange={(value) => setDateRange(value as DateRangeFilter)}
+              icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[165px]"
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <ArrowUpDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <select
-                value={sortOrder}
-                onChange={(event) => setSortOrder(event.target.value as SortOrder)}
-                className="h-11 min-w-[160px] appearance-none rounded-xl border border-border/70 bg-background pl-11 pr-9 text-sm font-medium text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
-              >
-                <option value="newest">{copy.newest}</option>
-                <option value="oldest">{copy.oldest}</option>
-                <option value="name">{copy.name}</option>
-                <option value="size">{copy.largest}</option>
-              </select>
-            </div>
+            <FilterDropdown
+              value={sortOrder}
+              options={sortOptions}
+              onChange={(value) => setSortOrder(value as SortOrder)}
+              icon={<ArrowUpDown className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[165px]"
+              align="end"
+            />
 
             <button
               type="button"
@@ -785,7 +794,7 @@ export default function DocumentsPage() {
                     <p className="mt-1 text-sm uppercase text-muted-foreground">{getExtension(doc.originalFileName)}</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
-                      <span>{formatRelativeTime(doc.createdAt)}</span>
+                      <span>{formatRelativeTime(doc.createdAt, now, language)}</span>
                       {doc.folderName && <span>{doc.folderName}</span>}
                     </div>
                   </div>
@@ -842,8 +851,8 @@ export default function DocumentsPage() {
               </div>
               <span className="text-sm text-foreground">{formatFileSize(folder.totalSize, "0 KB")}</span>
               <div className="text-sm">
-                <p className="font-medium text-foreground">{formatRelativeTime(folder.createdAt)}</p>
-                <p className="text-muted-foreground">{formatClock(folder.createdAt)}</p>
+                <p className="font-medium text-foreground">{formatRelativeTime(folder.createdAt, now, language)}</p>
+                <p className="text-muted-foreground">{formatExactDateTime(folder.createdAt, language)}</p>
               </div>
               <div className="flex items-center justify-end gap-3">
                 <MessageSquare className="h-5 w-5 text-muted-foreground" />
@@ -900,8 +909,8 @@ export default function DocumentsPage() {
                 </div>
                 <span className="text-sm text-foreground">{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
                 <div className="text-sm">
-                  <p className="font-medium text-foreground">{formatRelativeTime(doc.createdAt)}</p>
-                  <p className="text-muted-foreground">{formatClock(doc.createdAt)}</p>
+                  <p className="font-medium text-foreground">{formatRelativeTime(doc.createdAt, now, language)}</p>
+                  <p className="text-muted-foreground">{formatExactDateTime(doc.createdAt, language)}</p>
                 </div>
                 <div className="flex items-center justify-end gap-3" onClick={(event) => event.stopPropagation()}>
                   <MessageSquare className="h-5 w-5 text-muted-foreground" />
@@ -1144,6 +1153,62 @@ function ModalFrame({ children, onClose }: { children: React.ReactNode; onClose:
         {children}
       </motion.div>
     </motion.div>
+  )
+}
+
+function FilterDropdown({
+  value,
+  options,
+  onChange,
+  icon,
+  minWidth = "min-w-[150px]",
+  align = "start",
+}: {
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+  icon: React.ReactNode
+  minWidth?: string
+  align?: "start" | "end"
+}) {
+  const selected = options.find((option) => option.value === value) || options[0]
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex h-11 items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-secondary/70 focus:outline-none focus:ring-4 focus:ring-primary/10 ${minWidth}`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {icon}
+            <span className="truncate">{selected?.label}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} sideOffset={8} className="glass-card max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto border-border/50 p-1.5">
+        {options.map((option) => {
+          const isSelected = option.value === value
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => onChange(option.value)}
+              className={`cursor-pointer gap-2 rounded-lg px-3 py-2 text-sm ${
+                isSelected ? "bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary" : "text-muted-foreground focus:text-foreground"
+              }`}
+            >
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border"
+              }`}>
+                {isSelected && <Check className="h-3 w-3" />}
+              </span>
+              <span className="truncate">{option.label}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
