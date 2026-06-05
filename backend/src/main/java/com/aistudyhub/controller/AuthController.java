@@ -21,6 +21,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -73,48 +74,9 @@ public class AuthController {
         return authService.resetPassword(request);
     }
 
-    @GetMapping("/account/security")
-    public AccountSecurityDto accountSecurity(@RequestParam Long userId) {
-        return authService.accountSecurity(userId);
-    }
-
-    @PostMapping("/account/send-email-verification")
-    public MessageResponse sendEmailVerification(
-            @Valid @RequestBody AccountActionUserRequest request,
-            HttpServletRequest httpRequest
-    ) {
-        return authService.sendEmailVerification(request.userId(), resolveFrontendUrl(httpRequest));
-    }
-
-    @PostMapping("/account/change-email")
-    public MessageResponse requestEmailChange(
-            @Valid @RequestBody ChangeEmailRequest request,
-            HttpServletRequest httpRequest
-    ) {
-        return authService.requestEmailChange(request, resolveFrontendUrl(httpRequest));
-    }
-
-    @PostMapping("/account/change-password")
-    public MessageResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
-        return authService.changePassword(request);
-    }
-
-    @PostMapping("/account/delete-request")
-    public MessageResponse requestAccountDeletion(
-            @Valid @RequestBody AccountActionUserRequest request,
-            HttpServletRequest httpRequest
-    ) {
-        return authService.requestAccountDeletion(request.userId(), resolveFrontendUrl(httpRequest));
-    }
-
-    @PostMapping("/account/link-google")
-    public AccountSecurityDto linkGoogleAccount(@Valid @RequestBody LinkGoogleAccountRequest request) {
-        return authService.linkGoogleAccount(request);
-    }
-
-    @GetMapping("/account/confirm")
-    public AccountActionResultDto confirmAccountAction(@RequestParam String token) {
-        return authService.confirmAccountAction(token);
+    @GetMapping("/verify-email")
+    public MessageResponse verifyEmail(@RequestParam String token) {
+        return authService.verifyEmail(token);
     }
 
     @GetMapping("/users/{id}")
@@ -122,7 +84,7 @@ public class AuthController {
         return authService.findById(id);
     }
 
-    @PatchMapping("/users/{id}/profile")
+    @PatchMapping("/users/{id}")
     public UserDto updateProfile(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
         return authService.updateProfile(id, request);
     }
