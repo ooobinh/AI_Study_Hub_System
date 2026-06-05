@@ -1,9 +1,12 @@
 package com.aistudyhub.controller;
 
 import com.aistudyhub.dto.document.CreateDocumentRequest;
+import com.aistudyhub.dto.document.CreateDocumentFolderRequest;
 import com.aistudyhub.dto.document.DocumentDto;
+import com.aistudyhub.dto.document.DocumentFolderDto;
 import com.aistudyhub.dto.document.DocumentPreviewDto;
 import com.aistudyhub.dto.document.DocumentShareDto;
+import com.aistudyhub.dto.document.MoveDocumentRequest;
 import com.aistudyhub.dto.document.UpdateDocumentRequest;
 import com.aistudyhub.service.DocumentPreviewService;
 import com.aistudyhub.service.DocumentService;
@@ -58,6 +61,17 @@ public class DocumentController {
         return documentService.list(search, subjectId, userId);
     }
 
+    @GetMapping("/folders")
+    public List<DocumentFolderDto> folders(@RequestParam Long userId) {
+        return documentService.listFolders(userId);
+    }
+
+    @PostMapping("/folders")
+    @ResponseStatus(HttpStatus.CREATED)
+    public DocumentFolderDto createFolder(@Valid @RequestBody CreateDocumentFolderRequest request) {
+        return documentService.createFolder(request);
+    }
+
     @GetMapping("/{id}")
     public DocumentDto find(@PathVariable Long id, @RequestParam(required = false) Long userId) {
         return documentService.findById(id, userId);
@@ -76,6 +90,15 @@ public class DocumentController {
             @Valid @RequestBody UpdateDocumentRequest request
     ) {
         return documentService.update(id, request, userId);
+    }
+
+    @PutMapping("/{id}/folder")
+    public DocumentDto moveToFolder(
+            @PathVariable Long id,
+            @RequestParam Long userId,
+            @Valid @RequestBody MoveDocumentRequest request
+    ) {
+        return documentService.moveToFolder(id, request, userId);
     }
 
     @DeleteMapping("/{id}")
@@ -209,3 +232,6 @@ public class DocumentController {
     private record DownloadedDocumentFile(byte[] content, String contentType) {
     }
 }
+
+
+

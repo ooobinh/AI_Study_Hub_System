@@ -1,9 +1,12 @@
 package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
+import com.aistudyhub.dto.document.CreateDocumentFolderRequest;
 import com.aistudyhub.dto.document.CreateDocumentRequest;
 import com.aistudyhub.dto.document.DocumentDto;
+import com.aistudyhub.dto.document.DocumentFolderDto;
 import com.aistudyhub.dto.document.DocumentShareDto;
+import com.aistudyhub.dto.document.MoveDocumentRequest;
 import com.aistudyhub.dto.document.UpdateDocumentRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -33,6 +38,8 @@ public class DocumentService {
                     rs.getString("owner_name"),
                     nullableLong(rs, "subject_id"),
                     rs.getString("subject_name"),
+                    nullableLong(rs, "folder_id"),
+                    rs.getString("folder_name"),
                     nullableLong(rs, "category_id"),
                     rs.getString("category_name"),
                     rs.getString("title"),
@@ -49,8 +56,8 @@ public class DocumentService {
                     rs.getInt("view_count"),
                     rs.getBoolean("favorite"),
                     findTags(id),
-                    rs.getTimestamp("created_at").toLocalDateTime(),
-                    rs.getTimestamp("updated_at").toLocalDateTime()
+                    toLocalDateTime(rs.getTimestamp("created_at")),
+                    toLocalDateTime(rs.getTimestamp("updated_at"))
             );
         }
     };
@@ -143,19 +150,73 @@ public class DocumentService {
                 """, documentMapper, userId, workspaceId);
     }
 
+    public List<DocumentFolderDto> listFolders(Long userId) {
+        if (userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "userId is required");
+        }
+
+        return jdbcTemplate.query("""
+                SELECT f.folder_id, f.owner_id, f.folder_name,
+                       COALESCE(COUNT(d.document_id), 0) AS document_count,
+                       COALESCE(SUM(COALESCE(d.file_size, 0)), 0) AS total_size,
+                       f.created_at, f.updated_at
+                FROM document_folders f
+                LEFT JOIN documents d
+                    ON d.folder_id = f.folder_id
+                   AND d.status <> 'DELETED'
+                WHERE f.owner_id = ? AND f.status = 'ACTIVE'
+                GROUP BY f.folder_id, f.owner_id, f.folder_name, f.created_at, f.updated_at
+                ORDER BY f.created_at DESC
+                """, this::mapFolder, userId);
+    }
+
+    @Transactional
+    public DocumentFolderDto createFolder(CreateDocumentFolderRequest request) {
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Folder name is required");
+        }
+
+        Integer duplicateCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM document_folders
+                WHERE owner_id = ?
+                  AND status = 'ACTIVE'
+                  AND LOWER(folder_name) = LOWER(?)
+                """, Integer.class, request.ownerId(), name);
+        if (duplicateCount != null && duplicateCount > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "Folder already exists");
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO document_folders (owner_id, folder_name, status, created_at, updated_at)
+                VALUES (?, ?, 'ACTIVE', SYSDATETIME(), SYSDATETIME())
+                """, request.ownerId(), name);
+
+        Long id = jdbcTemplate.query("""
+                SELECT TOP 1 folder_id
+                FROM document_folders
+                WHERE owner_id = ? AND folder_name = ? AND status = 'ACTIVE'
+                ORDER BY created_at DESC
+                """, rs -> rs.next() ? rs.getLong("folder_id") : null, request.ownerId(), name);
+        return findFolder(id, request.ownerId());
+    }
+
     @Transactional
     public DocumentDto create(CreateDocumentRequest request) {
         String visibility = request.visibility() == null ? "PRIVATE" : request.visibility().toUpperCase();
+        validateFolderForOwner(request.folderId(), request.ownerId());
         jdbcTemplate.update("""
                 INSERT INTO documents (
-                    owner_id, subject_id, category_id, title, description, original_file_name,
+                    owner_id, subject_id, folder_id, category_id, title, description, original_file_name,
                     file_url, preview_url, file_type, file_size, page_count, visibility,
                     status, download_count, view_count, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, SYSDATETIME(), SYSDATETIME())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, SYSDATETIME(), SYSDATETIME())
                 """,
                 request.ownerId(),
                 request.subjectId(),
+                request.folderId(),
                 request.categoryId(),
                 request.title(),
                 request.description(),
@@ -181,13 +242,16 @@ public class DocumentService {
     public DocumentDto update(Long id, UpdateDocumentRequest request, Long userId) {
         DocumentDto current = findByIdInternal(id, null);
         ensureCanManageDocument(current, userId);
+        Long nextFolderId = request.folderId() == null ? current.folderId() : request.folderId();
+        validateFolderForOwner(nextFolderId, current.ownerId());
         jdbcTemplate.update("""
                 UPDATE documents
-                SET subject_id = ?, category_id = ?, title = ?, description = ?,
+                SET subject_id = ?, folder_id = ?, category_id = ?, title = ?, description = ?,
                     visibility = ?, status = ?, page_count = ?, updated_at = SYSDATETIME()
                 WHERE document_id = ?
                 """,
                 request.subjectId() == null ? current.subjectId() : request.subjectId(),
+                nextFolderId,
                 request.categoryId() == null ? current.categoryId() : request.categoryId(),
                 request.title() == null ? current.title() : request.title(),
                 request.description() == null ? current.description() : request.description(),
@@ -196,6 +260,25 @@ public class DocumentService {
                 request.pageCount() == null ? current.pageCount() : request.pageCount(),
                 id);
         return findByIdInternal(id, null);
+    }
+
+    @Transactional
+    public DocumentDto moveToFolder(Long id, MoveDocumentRequest request, Long userId) {
+        DocumentDto current = findByIdInternal(id, null);
+        ensureCanManageDocument(current, userId);
+        validateFolderForOwner(request.folderId(), current.ownerId());
+
+        int updated = jdbcTemplate.update("""
+                UPDATE documents
+                SET folder_id = ?, updated_at = SYSDATETIME()
+                WHERE document_id = ?
+                """, request.folderId(), id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Document not found");
+        }
+
+        return findByIdInternal(id, userId);
     }
 
     @Transactional
@@ -260,7 +343,7 @@ public class DocumentService {
                 rs.getString("share_token"),
                 rs.getString("permission"),
                 "",
-                rs.getTimestamp("created_at").toLocalDateTime()
+                toLocalDateTime(rs.getTimestamp("created_at"))
         ), token).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Share link was not created"));
     }
@@ -318,7 +401,8 @@ public class DocumentService {
     private String baseSelect() {
         return """
                 SELECT d.document_id, d.owner_id, u.full_name AS owner_name,
-                       d.subject_id, s.subject_name, d.category_id, c.category_name,
+                       d.subject_id, s.subject_name, d.folder_id, f.folder_name,
+                       d.category_id, c.category_name,
                        d.title, d.description, d.original_file_name, d.file_url, d.preview_url,
                        d.file_type, d.file_size, d.page_count, d.visibility, d.status,
                        d.download_count, d.view_count, d.created_at, d.updated_at,
@@ -329,8 +413,59 @@ public class DocumentService {
                 FROM documents d
                 INNER JOIN users u ON u.user_id = d.owner_id
                 LEFT JOIN subjects s ON s.subject_id = d.subject_id
+                LEFT JOIN document_folders f ON f.folder_id = d.folder_id
                 LEFT JOIN categories c ON c.category_id = d.category_id
                 """;
+    }
+
+    private DocumentFolderDto findFolder(Long id, Long userId) {
+        if (id == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Folder not found");
+        }
+
+        return jdbcTemplate.query("""
+                SELECT f.folder_id, f.owner_id, f.folder_name,
+                       COALESCE(COUNT(d.document_id), 0) AS document_count,
+                       COALESCE(SUM(COALESCE(d.file_size, 0)), 0) AS total_size,
+                       f.created_at, f.updated_at
+                FROM document_folders f
+                LEFT JOIN documents d
+                    ON d.folder_id = f.folder_id
+                   AND d.status <> 'DELETED'
+                WHERE f.folder_id = ?
+                  AND f.owner_id = ?
+                  AND f.status = 'ACTIVE'
+                GROUP BY f.folder_id, f.owner_id, f.folder_name, f.created_at, f.updated_at
+                """, this::mapFolder, id, userId).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Folder not found"));
+    }
+
+    private DocumentFolderDto mapFolder(ResultSet rs, int rowNum) throws SQLException {
+        return new DocumentFolderDto(
+                rs.getLong("folder_id"),
+                rs.getLong("owner_id"),
+                rs.getString("folder_name"),
+                rs.getLong("document_count"),
+                rs.getLong("total_size"),
+                toLocalDateTime(rs.getTimestamp("created_at")),
+                toLocalDateTime(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private void validateFolderForOwner(Long folderId, Long ownerId) {
+        if (folderId == null) {
+            return;
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM document_folders
+                WHERE folder_id = ?
+                  AND owner_id = ?
+                  AND status = 'ACTIVE'
+                """, Integer.class, folderId, ownerId);
+        if (count == null || count == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Folder not found for this account");
+        }
     }
 
     private List<String> findTags(Long documentId) {
@@ -406,5 +541,9 @@ public class DocumentService {
     private Integer nullableInt(ResultSet rs, String column) throws SQLException {
         int value = rs.getInt(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

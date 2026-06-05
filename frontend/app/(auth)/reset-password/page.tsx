@@ -1,9 +1,10 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense, useState } from "react"
 import { ArrowRight, Eye, EyeOff, Lock, Sparkles } from "lucide-react"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 function ResetPasswordContent() {
@@ -58,6 +59,25 @@ function ResetPasswordContent() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
       <div className="absolute inset-0 gradient-mesh" />
+      <AnimatePresence>
+        {isSubmitting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 flex items-center justify-center bg-background/65 p-4 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="glass-card rounded-2xl px-10 py-8 shadow-2xl"
+            >
+              <LogoLoader className="min-h-0 py-0" label="AI Study Hub" sublabel="Resetting password..." />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <motion.div
         className="absolute w-96 h-96 rounded-full bg-primary/20 blur-3xl"
         animate={{ x: [0, 80, 0], y: [0, -40, 0] }}
@@ -157,7 +177,7 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+    <Suspense fallback={<LogoLoader fullScreen label="AI Study Hub" sublabel="Loading password reset..." />}>
       <ResetPasswordContent />
     </Suspense>
   )

@@ -5,24 +5,31 @@ import { useState, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
 import {
-  Upload,
-  FileText,
-  Grid,
-  List,
-  Search,
-  Filter,
-  Star,
+  ArrowUpDown,
+  Calendar,
+  Check,
+  ChevronDown,
   Download,
-  Share2,
-  MoreVertical,
   Edit3,
   Eye,
-  Tag,
+  FileText,
+  Folder,
+  FolderPlus,
+  Grid,
+  List,
+  MessageSquare,
+  MoreVertical,
+  MoveRight,
+  Search,
+  Share2,
+  Star,
+  Trash2,
+  Upload,
   X,
-  Check
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   DropdownMenu,
@@ -37,6 +44,8 @@ interface DocumentDto {
   ownerName: string
   subjectId?: number | null
   subjectName?: string | null
+  folderId?: number | null
+  folderName?: string | null
   categoryName?: string | null
   title: string
   description?: string | null
@@ -50,6 +59,17 @@ interface DocumentDto {
   status: string
   favorite: boolean
   createdAt: string
+  updatedAt?: string | null
+}
+
+interface DocumentFolderDto {
+  id: number
+  ownerId: number
+  name: string
+  documentCount: number
+  totalSize: number
+  createdAt: string
+  updatedAt?: string | null
 }
 
 interface DocumentShareDto {
@@ -62,9 +82,20 @@ interface SubjectDto {
   name: string
 }
 
-async function uploadFileToBackend(file: File, ownerId: string): Promise<DocumentDto> {
+type FolderFilter = "all" | "root" | string
+type FileTypeFilter = "all" | "pdf" | "word" | "powerpoint" | "other"
+type DateRangeFilter = "all" | "today" | "7d" | "30d"
+type SortOrder = "newest" | "oldest" | "name" | "size"
+
+const MAX_UPLOAD_FILES = 10
+const SUPPORTED_UPLOAD_LABEL = "PDF, DOC, DOCX, PPT, PPTX"
+
+async function uploadFileToBackend(file: File, ownerId: string, folderId?: number | null): Promise<DocumentDto> {
   const formData = new FormData()
   formData.append("ownerId", ownerId)
+  if (folderId) {
+    formData.append("folderId", String(folderId))
+  }
   formData.append("file", file)
 
   const response = await fetch(`${getApiUrl()}/api/uploads/documents`, {
@@ -82,16 +113,17 @@ async function uploadFileToBackend(file: File, ownerId: string): Promise<Documen
 
 const container = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } }
+  show: { opacity: 1, transition: { staggerChildren: 0.04 } },
 }
 
 const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0 },
 }
 
 function formatFileSize(bytes: number | null | undefined, unknownSize: string) {
-  if (!bytes) return unknownSize
+  if (bytes == null) return unknownSize
+  if (bytes === 0) return "0 KB"
   const units = ["B", "KB", "MB", "GB"]
   let size = bytes
   let unit = 0
@@ -99,35 +131,196 @@ function formatFileSize(bytes: number | null | undefined, unknownSize: string) {
     size /= 1024
     unit += 1
   }
-  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
+  return `${size.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`
 }
 
-function formatDate(value: string, language: "en" | "vi") {
+function formatExactDateTime(value: string | null | undefined, language: "en" | "vi") {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
   return new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(value))
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatRelativeTime(value: string | null | undefined, now: number, language: "en" | "vi") {
+  if (!value) return ""
+  const date = new Date(value)
+  const diff = now - date.getTime()
+  if (Number.isNaN(diff)) return ""
+  const minutes = Math.max(0, Math.floor(diff / 60000))
+  if (minutes < 1) return language === "vi" ? "vua xong" : "just now"
+  if (minutes < 60) return language === "vi" ? `${minutes} phut truoc` : `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return language === "vi" ? `${hours} gio truoc` : `about ${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return language === "vi" ? `${days} ngay truoc` : `${days} day${days === 1 ? "" : "s"} ago`
+  return new Intl.DateTimeFormat(language === "vi" ? "vi-VN" : "en", { month: "short", day: "numeric", year: "numeric" }).format(date)
+}
+
+function getExtension(fileName: string) {
+  const parts = fileName.split(".")
+  return parts.length > 1 ? parts.pop()?.toUpperCase() || "FILE" : "FILE"
+}
+
+function getFileKind(doc: DocumentDto): FileTypeFilter {
+  const value = `${doc.fileType || ""} ${doc.originalFileName || ""}`.toLowerCase()
+  if (value.includes("pdf") || value.endsWith(".pdf")) return "pdf"
+  if (value.includes("word") || value.endsWith(".doc") || value.endsWith(".docx")) return "word"
+  if (value.includes("powerpoint") || value.endsWith(".ppt") || value.endsWith(".pptx")) return "powerpoint"
+  return "other"
+}
+
+function matchesDateRange(value: string, range: DateRangeFilter) {
+  if (range === "all") return true
+  const created = new Date(value).getTime()
+  if (Number.isNaN(created)) return true
+  const now = Date.now()
+  if (range === "today") {
+    return new Date(value).toDateString() === new Date().toDateString()
+  }
+  const days = range === "7d" ? 7 : 30
+  return now - created <= days * 24 * 60 * 60 * 1000
+}
+
+function fileBadgeClasses(kind: FileTypeFilter) {
+  if (kind === "pdf") return "bg-red-600 text-white shadow-red-600/20"
+  if (kind === "word") return "bg-blue-600 text-white shadow-blue-600/20"
+  if (kind === "powerpoint") return "bg-orange-600 text-white shadow-orange-600/20"
+  return "bg-slate-600 text-white shadow-slate-600/20"
+}
+
+function DocumentFileIcon({
+  fileName,
+  kind,
+  className = "",
+}: {
+  fileName: string
+  kind: FileTypeFilter
+  className?: string
+}) {
+  const extension = getExtension(fileName)
+
+  return (
+    <div className={`relative flex h-14 w-12 shrink-0 items-center justify-center ${className}`}>
+      <div className="absolute inset-x-[5px] inset-y-0 rounded-[5px] border border-slate-300 bg-white shadow-sm">
+        <span className="absolute right-0 top-0 h-0 w-0 border-b-[13px] border-l-[13px] border-b-slate-200 border-l-transparent" />
+        <span className="absolute right-[-1px] top-[-1px] h-0 w-0 border-b-[15px] border-l-[15px] border-b-slate-300/80 border-l-transparent opacity-35" />
+      </div>
+      <span className={`relative mt-4 min-w-11 rounded-[3px] px-1.5 py-0.5 text-center text-[10px] font-bold leading-none shadow-md ${fileBadgeClasses(kind)}`}>
+        {extension}
+      </span>
+    </div>
+  )
 }
 
 export default function DocumentsPage() {
   const { user } = useAuth()
   const { language, t } = useLanguage()
   const router = useRouter()
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [selectedSubject, setSelectedSubject] = useState("All")
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
+  const [selectedFolderId, setSelectedFolderId] = useState<FolderFilter>("all")
+  const [fileTypeFilter, setFileTypeFilter] = useState<FileTypeFilter>("all")
+  const [dateRange, setDateRange] = useState<DateRangeFilter>("all")
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest")
   const [searchQuery, setSearchQuery] = useState("")
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadMessage, setUploadMessage] = useState("")
   const [documents, setDocuments] = useState<DocumentDto[]>([])
+  const [folders, setFolders] = useState<DocumentFolderDto[]>([])
+  const [now, setNow] = useState(() => Date.now())
   const [availableSubjects, setAvailableSubjects] = useState<SubjectDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [newFolderName, setNewFolderName] = useState("")
+  const [createFolderError, setCreateFolderError] = useState("")
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [movingDoc, setMovingDoc] = useState<DocumentDto | null>(null)
+  const [moveTargetFolderId, setMoveTargetFolderId] = useState("")
+  const [moveError, setMoveError] = useState("")
   const [editingDoc, setEditingDoc] = useState<DocumentDto | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
   const [editVisibility, setEditVisibility] = useState("PRIVATE")
   const [editSubjectId, setEditSubjectId] = useState("")
+
+  const copy = useMemo(() => ({
+    title: t("documents"),
+    subtitle: language === "vi" ? "Quan ly tai lieu hoc tap va thu muc cua ban." : "View all your uploaded documents here",
+    createFolder: language === "vi" ? "Tao folder" : "Create folder",
+    allFolders: language === "vi" ? "Tat ca folder" : "All Folders",
+    outsideFolder: language === "vi" ? "Ben ngoai folder" : "Outside folder",
+    fileType: language === "vi" ? "Loai file" : "File type",
+    dateRange: language === "vi" ? "Khoang ngay" : "Date range",
+    sortOrder: language === "vi" ? "Sap xep" : "Sort order",
+    gridView: language === "vi" ? "Grid view" : "Grid view",
+    listView: language === "vi" ? "List view" : "List view",
+    fileName: language === "vi" ? "Ten file" : "File Name",
+    size: language === "vi" ? "Dung luong" : "Size",
+    dateCreated: language === "vi" ? "Ngay tao" : "Date created",
+    nothingMore: language === "vi" ? "Khong con gi de hien thi..." : "Nothing more to show...",
+    openFolder: language === "vi" ? "Mo folder" : "Open folder",
+    moveToFolder: language === "vi" ? "Chuyen toi folder" : "Move to folder",
+    folderName: language === "vi" ? "Ten folder" : "Folder name",
+    create: language === "vi" ? "Tao" : "Create",
+    uploadTo: language === "vi" ? "Upload vao" : "Upload to",
+    documentCount: language === "vi" ? "tai lieu" : "document",
+    processing: language === "vi" ? "Dang xu ly" : "Processing",
+    processed: language === "vi" ? "Da xu ly" : "Processed",
+    failed: language === "vi" ? "Loi" : "Failed",
+    move: language === "vi" ? "Chuyen" : "Move",
+    newest: language === "vi" ? "Moi nhat" : "Newest first",
+    oldest: language === "vi" ? "Cu nhat" : "Oldest first",
+    name: language === "vi" ? "Ten A-Z" : "Name A-Z",
+    largest: language === "vi" ? "Dung luong" : "Largest size",
+    today: language === "vi" ? "Hom nay" : "Today",
+    last7Days: language === "vi" ? "7 ngay" : "Last 7 days",
+    last30Days: language === "vi" ? "30 ngay" : "Last 30 days",
+    folderAlreadyOpen: language === "vi" ? "Dang xem folder nay" : "Current folder",
+    uploadRules: language === "vi"
+      ? `Ho tro ${SUPPORTED_UPLOAD_LABEL}. Toi da ${MAX_UPLOAD_FILES} tep moi lan upload.`
+      : `Supports ${SUPPORTED_UPLOAD_LABEL}. Up to ${MAX_UPLOAD_FILES} files per upload.`,
+    tooManyFiles: language === "vi"
+      ? `Upload khong hop le. Ho tro ${SUPPORTED_UPLOAD_LABEL}, toi da ${MAX_UPLOAD_FILES} tep/lan.`
+      : `Invalid upload. Supports ${SUPPORTED_UPLOAD_LABEL}, up to ${MAX_UPLOAD_FILES} files at once.`,
+  }), [language, t])
+
+  const selectedFolder = useMemo(() => {
+    if (selectedFolderId === "all" || selectedFolderId === "root") return null
+    return folders.find((folder) => String(folder.id) === selectedFolderId) || null
+  }, [folders, selectedFolderId])
+
+  const uploadFolderId = selectedFolder ? selectedFolder.id : null
+  const uploadTargetName = selectedFolder ? selectedFolder.name : copy.outsideFolder
+  const folderOptions = useMemo(() => [
+    { value: "all", label: copy.allFolders },
+    { value: "root", label: copy.outsideFolder },
+    ...folders.map((folder) => ({ value: String(folder.id), label: folder.name })),
+  ], [copy.allFolders, copy.outsideFolder, folders])
+  const fileTypeOptions = useMemo(() => [
+    { value: "all", label: copy.fileType },
+    { value: "pdf", label: "PDF" },
+    { value: "word", label: "Word" },
+    { value: "powerpoint", label: "PowerPoint" },
+    { value: "other", label: "Other" },
+  ], [copy.fileType])
+  const dateRangeOptions = useMemo(() => [
+    { value: "all", label: copy.dateRange },
+    { value: "today", label: copy.today },
+    { value: "7d", label: copy.last7Days },
+    { value: "30d", label: copy.last30Days },
+  ], [copy.dateRange, copy.last30Days, copy.last7Days, copy.today])
+  const sortOptions = useMemo(() => [
+    { value: "newest", label: copy.newest },
+    { value: "oldest", label: copy.oldest },
+    { value: "name", label: copy.name },
+    { value: "size", label: copy.largest },
+  ], [copy.largest, copy.name, copy.newest, copy.oldest])
 
   const loadDocuments = useCallback(async () => {
     if (!user) return
@@ -135,9 +328,10 @@ export default function DocumentsPage() {
     setError("")
 
     try {
-      const [documentsResponse, subjectsResponse] = await Promise.all([
+      const [documentsResponse, subjectsResponse, foldersResponse] = await Promise.all([
         fetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
         fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
+        fetch(`${getApiUrl()}/api/documents/folders?userId=${user.id}`),
       ])
       if (!documentsResponse.ok) {
         throw new Error(t("couldNotLoadDocuments"))
@@ -145,10 +339,19 @@ export default function DocumentsPage() {
       if (!subjectsResponse.ok) {
         throw new Error("Could not load subjects")
       }
+      if (!foldersResponse.ok) {
+        const body = await foldersResponse.json().catch(() => null)
+        throw new Error(body?.message || "Could not load folders")
+      }
       const data = await documentsResponse.json() as DocumentDto[]
       const subjectsData = await subjectsResponse.json() as SubjectDto[]
-      setDocuments(data)
+      const folderData = await foldersResponse.json() as DocumentFolderDto[]
+      const personalDocuments = user.roles.includes("ADMIN")
+        ? data
+        : data.filter((doc) => String(doc.ownerId) === user.id)
+      setDocuments(personalDocuments)
       setAvailableSubjects(subjectsData)
+      setFolders(folderData)
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
@@ -159,6 +362,11 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadDocuments()
   }, [loadDocuments])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!user || acceptedFiles.length === 0) return
@@ -172,11 +380,11 @@ export default function DocumentsPage() {
         setUploadProgress(0)
         setUploadMessage(`${t("uploading")} ${file.name}...`)
 
-        setUploadProgress(20)
-        const uploadedDoc = await uploadFileToBackend(file, user.id)
+        setUploadProgress(25)
+        const uploadedDoc = await uploadFileToBackend(file, user.id, uploadFolderId)
         uploadedDocs.push(uploadedDoc)
         setDocuments(prev => [uploadedDoc, ...prev.filter(doc => doc.id !== uploadedDoc.id)])
-        setUploadProgress(95)
+        setUploadProgress(90)
       } catch (err) {
         setError(getNetworkErrorMessage(err))
         break
@@ -189,7 +397,6 @@ export default function DocumentsPage() {
       return
     }
 
-    setSelectedSubject("All")
     setSearchQuery("")
     setUploadProgress(100)
     setUploadMessage(uploadedDocs.length === 1 ? t("uploadCompleteShort") : `${uploadedDocs.length} ${t("filesUploaded")}`)
@@ -197,36 +404,92 @@ export default function DocumentsPage() {
     setTimeout(() => {
       setUploadProgress(null)
       setUploadMessage("")
-    }, 1200)
-  }, [loadDocuments, t, user])
+    }, 1400)
+  }, [loadDocuments, t, uploadFolderId, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    maxFiles: MAX_UPLOAD_FILES,
+    onDropRejected: () => {
+      setError(copy.tooManyFiles)
+    },
     accept: {
       "application/pdf": [".pdf"],
       "application/msword": [".doc"],
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
       "application/vnd.ms-powerpoint": [".ppt"],
       "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
-    }
+    },
   })
 
-  const subjects = useMemo(() => {
-    const names = documents.map((doc) => doc.subjectName || t("uncategorized"))
-    return ["All", ...Array.from(new Set(names))]
-  }, [documents, t])
+  const visibleFolders = useMemo(() => {
+    if (selectedFolderId !== "all" || fileTypeFilter !== "all" || dateRange !== "all") return []
+    const keyword = searchQuery.trim().toLowerCase()
+    return folders.filter((folder) => !keyword || folder.name.toLowerCase().includes(keyword))
+  }, [dateRange, fileTypeFilter, folders, searchQuery, selectedFolderId])
 
-  const filteredDocuments = documents.filter(doc => {
-    const subject = doc.subjectName || t("uncategorized")
-    const matchesSubject = selectedSubject === "All" || subject === selectedSubject
-    const haystack = `${doc.title} ${doc.originalFileName} ${subject}`.toLowerCase()
-    const matchesSearch = haystack.includes(searchQuery.toLowerCase())
-    return matchesSubject && matchesSearch
-  })
+  const filteredDocuments = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase()
+    const filtered = documents.filter((doc) => {
+      const folderMatch =
+        selectedFolderId === "all"
+          ? true
+          : selectedFolderId === "root"
+            ? !doc.folderId
+            : String(doc.folderId || "") === selectedFolderId
+      const typeMatch = fileTypeFilter === "all" || getFileKind(doc) === fileTypeFilter
+      const dateMatch = matchesDateRange(doc.createdAt, dateRange)
+      const haystack = `${doc.title} ${doc.originalFileName} ${doc.subjectName || ""} ${doc.folderName || ""}`.toLowerCase()
+      const searchMatch = !keyword || haystack.includes(keyword)
+      return folderMatch && typeMatch && dateMatch && searchMatch
+    })
+
+    return filtered.sort((a, b) => {
+      if (sortOrder === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      if (sortOrder === "name") return (a.title || a.originalFileName).localeCompare(b.title || b.originalFileName)
+      if (sortOrder === "size") return (b.fileSize || 0) - (a.fileSize || 0)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+  }, [dateRange, documents, fileTypeFilter, searchQuery, selectedFolderId, sortOrder])
 
   const canManageDocument = (doc: DocumentDto) => {
     if (!user) return false
     return user.roles.includes("ADMIN") || String(doc.ownerId) === user.id
+  }
+
+  const canMoveDocument = (doc: DocumentDto) => {
+    if (!user) return false
+    return String(doc.ownerId) === user.id
+  }
+
+  const createFolder = async () => {
+    if (!user) return
+    const name = newFolderName.trim()
+    if (!name) {
+      setCreateFolderError("Folder name is required")
+      return
+    }
+
+    setIsCreatingFolder(true)
+    setCreateFolderError("")
+    const response = await fetch(`${getApiUrl()}/api/documents/folders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ownerId: Number(user.id), name }),
+    })
+    setIsCreatingFolder(false)
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null)
+      setCreateFolderError(body?.message || "Could not create folder")
+      return
+    }
+
+    const folder = await response.json() as DocumentFolderDto
+    setFolders(prev => [folder, ...prev.filter(item => item.id !== folder.id)])
+    setNewFolderName("")
+    setCreateFolderOpen(false)
+    setSelectedFolderId("all")
   }
 
   const toggleFavorite = async (id: number) => {
@@ -240,11 +503,11 @@ export default function DocumentsPage() {
     }
   }
 
-  const viewDocument = async (doc: DocumentDto) => {
+  const viewDocument = (doc: DocumentDto) => {
     router.push(`/documents/${doc.id}/view`)
   }
 
-  const downloadDocument = async (doc: DocumentDto) => {
+  const downloadDocument = (doc: DocumentDto) => {
     const separator = user ? "&" : "?"
     const userParam = user ? `?userId=${user.id}` : ""
     window.open(`${getApiUrl()}/api/documents/${doc.id}/file${userParam}${separator}download=true`, "_blank")
@@ -259,6 +522,7 @@ export default function DocumentsPage() {
       return
     }
     setDocuments(prev => prev.filter(doc => doc.id !== id))
+    await loadDocuments()
   }
 
   const shareDocument = async (doc: DocumentDto) => {
@@ -274,7 +538,7 @@ export default function DocumentsPage() {
     const share = await response.json() as DocumentShareDto
     await navigator.clipboard.writeText(share.shareUrl)
     setUploadMessage(t("shareLinkCopied"))
-    setTimeout(() => setUploadMessage(""), 1200)
+    setTimeout(() => setUploadMessage(""), 1400)
   }
 
   const openEditDialog = (doc: DocumentDto) => {
@@ -286,9 +550,7 @@ export default function DocumentsPage() {
   }
 
   const saveEdit = async () => {
-    if (!editingDoc) return
-
-    if (!user) return
+    if (!editingDoc || !user) return
 
     const response = await fetch(`${getApiUrl()}/api/documents/${editingDoc.id}?userId=${user.id}`, {
       method: "PUT",
@@ -310,8 +572,44 @@ export default function DocumentsPage() {
     setDocuments(prev => prev.map(doc => doc.id === updated.id ? updated : doc))
     setEditingDoc(null)
     setUploadMessage(t("documentUpdated"))
-    setTimeout(() => setUploadMessage(""), 1200)
+    setTimeout(() => setUploadMessage(""), 1400)
   }
+
+  const openMoveDialog = (doc: DocumentDto) => {
+    setMovingDoc(doc)
+    setMoveTargetFolderId(doc.folderId ? String(doc.folderId) : "")
+    setMoveError("")
+  }
+
+  const moveDocumentToFolder = async () => {
+    if (!movingDoc || !user) return
+    const folderId = moveTargetFolderId ? Number(moveTargetFolderId) : null
+
+    const response = await fetch(`${getApiUrl()}/api/documents/${movingDoc.id}/folder?userId=${user.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId }),
+    })
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null)
+      setMoveError(body?.message || "Could not move document")
+      return
+    }
+
+    const updated = await response.json() as DocumentDto
+    setDocuments(prev => prev.map(doc => doc.id === updated.id ? updated : doc))
+    setMovingDoc(null)
+    await loadDocuments()
+  }
+
+  const documentStatus = (status: string) => {
+    if (status === "PENDING_REVIEW") return copy.processing
+    if (status === "REJECTED") return copy.failed
+    return copy.processed
+  }
+
+  const uploadRootProps = getRootProps()
 
   return (
     <motion.div
@@ -320,85 +618,44 @@ export default function DocumentsPage() {
       animate="show"
       className="space-y-6"
     >
-      <motion.div variants={item} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <motion.div variants={item} className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">{t("documents")}</h1>
-          <p className="text-muted-foreground mt-1">
-            {t("documentsSubtitle")}
-          </p>
+          <h1 className="text-2xl font-bold tracking-normal text-foreground md:text-3xl">{copy.title}</h1>
+          <p className="mt-2 text-sm text-muted-foreground md:text-base">{copy.subtitle}</p>
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 text-xs text-muted-foreground">
+            <Folder className="h-3.5 w-3.5" />
+            <span>{copy.uploadTo}: {uploadTargetName}</span>
+          </div>
         </div>
-      </motion.div>
-
-      <motion.div variants={item}>
-        <div
-          {...getRootProps()}
-          className={`relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-300 ${
-            isDragActive
-              ? "border-primary bg-primary/10"
-              : "border-border/50 hover:border-primary/50 hover:bg-secondary/30"
-          }`}
-        >
-          <input {...getInputProps()} />
-          <motion.div
-            animate={{ scale: isDragActive ? 1.05 : 1 }}
-            className="flex flex-col items-center gap-3"
-          >
-            <motion.div
-              className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-                isDragActive ? "bg-primary/20" : "bg-secondary"
-              }`}
-              animate={{ y: isDragActive ? -5 : 0 }}
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setCreateFolderOpen(true)}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-border/70 bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-secondary/70"
             >
-              <Upload className={`w-7 h-7 ${isDragActive ? "text-primary" : "text-muted-foreground"}`} />
-            </motion.div>
-            <div>
-              <p className="text-foreground font-medium">
-                {isDragActive ? t("dropFilesHere") : t("dragDropFiles")}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {t("supportedFiles")}
-              </p>
+              <FolderPlus className="h-4 w-4 text-muted-foreground" />
+              {copy.createFolder}
+            </button>
+            <div
+              {...uploadRootProps}
+              className={`inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all ${
+                isDragActive ? "bg-primary/80 ring-4 ring-primary/20" : "bg-foreground hover:bg-foreground/90"
+              }`}
+            >
+              <input {...getInputProps()} />
+              <Upload className="h-4 w-4" />
+              {t("upload")}
             </div>
-          </motion.div>
-
-          <AnimatePresence>
-            {uploadProgress !== null && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-2xl flex items-center justify-center"
-              >
-                <div className="flex flex-col items-center gap-3">
-                  {uploadProgress < 100 ? (
-                    <>
-                      <div className="w-48 h-2 bg-secondary rounded-full overflow-hidden">
-                        <motion.div
-                          className="h-full bg-primary"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                      <p className="text-sm text-foreground">{uploadMessage || `${t("uploading")}... ${uploadProgress}%`}</p>
-                    </>
-                  ) : (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="flex items-center gap-2 text-accent"
-                    >
-                      <Check className="w-5 h-5" />
-                      <span className="font-medium">{uploadMessage || t("uploadComplete")}</span>
-                    </motion.div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
+          <div className="flex max-w-sm items-start gap-2 rounded-xl border border-border/60 bg-secondary/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            <span>{copy.uploadRules}</span>
+          </div>
         </div>
       </motion.div>
 
-      {(error || uploadMessage) && uploadProgress === null && (
+      {(error || uploadMessage || uploadProgress !== null) && (
         <motion.div
           variants={item}
           className={`rounded-xl border px-4 py-3 text-sm ${
@@ -407,318 +664,621 @@ export default function DocumentsPage() {
               : "border-accent/30 bg-accent/10 text-accent"
           }`}
         >
-          {error || uploadMessage}
+          {uploadProgress !== null && !error ? (
+            <div className="flex items-center gap-3">
+              {uploadProgress < 100 ? (
+                <div className="h-2 w-32 overflow-hidden rounded-full bg-secondary">
+                  <motion.div className="h-full bg-accent" animate={{ width: `${uploadProgress}%` }} />
+                </div>
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              <span>{uploadMessage || `${t("uploading")}...`}</span>
+            </div>
+          ) : (
+            error || uploadMessage
+          )}
         </motion.div>
       )}
 
-      <motion.div variants={item} className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder={t("searchDocuments")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-          />
-        </div>
+      <motion.div variants={item} className="space-y-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap">
+            <label className="relative min-w-[240px] flex-1 md:max-w-sm">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder={t("searchDocuments")}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-11 w-full rounded-xl border border-border/70 bg-background pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-all placeholder:text-muted-foreground focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+              />
+            </label>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-          <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          {subjects.map((subject) => (
-            <motion.button
-              key={subject}
-              onClick={() => setSelectedSubject(subject)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-                selectedSubject === subject
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary/50 text-muted-foreground hover:text-foreground"
-              }`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {subject}
-            </motion.button>
-          ))}
-        </div>
+            <FilterDropdown
+              value={selectedFolderId}
+              options={folderOptions}
+              onChange={setSelectedFolderId}
+              icon={<Folder className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[180px]"
+            />
 
-        <div className="flex items-center gap-1 bg-secondary/50 rounded-xl p-1">
-          {[
-            { mode: "grid" as const, icon: Grid },
-            { mode: "list" as const, icon: List },
-          ].map(({ mode, icon: Icon }) => (
-            <motion.button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`p-2 rounded-lg transition-colors ${
-                viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+            <FilterDropdown
+              value={fileTypeFilter}
+              options={fileTypeOptions}
+              onChange={(value) => setFileTypeFilter(value as FileTypeFilter)}
+              icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[150px]"
+            />
+
+            <FilterDropdown
+              value={dateRange}
+              options={dateRangeOptions}
+              onChange={(value) => setDateRange(value as DateRangeFilter)}
+              icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[165px]"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <FilterDropdown
+              value={sortOrder}
+              options={sortOptions}
+              onChange={(value) => setSortOrder(value as SortOrder)}
+              icon={<ArrowUpDown className="h-4 w-4 text-muted-foreground" />}
+              minWidth="min-w-[165px]"
+              align="end"
+            />
+
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-border/70 bg-background px-4 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-secondary/70 hover:text-foreground"
             >
-              <Icon className="w-4 h-4" />
-            </motion.button>
-          ))}
+              {viewMode === "list" ? <Grid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+              {viewMode === "list" ? copy.gridView : copy.listView}
+            </button>
+          </div>
         </div>
       </motion.div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">{t("loadingDocuments")}</div>
-      ) : filteredDocuments.length === 0 ? (
-        <div className="rounded-2xl border border-border/50 bg-secondary/20 py-14 text-center">
-          <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="font-medium text-foreground">{t("noDocuments")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{t("noDocumentsSubtext")}</p>
-        </div>
-      ) : (
-        <motion.div
-          variants={container}
-          initial="hidden"
-          animate="show"
-          className={viewMode === "grid"
-            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-            : "flex flex-col gap-3"
-          }
-        >
-          {filteredDocuments.map((doc) => (
-            <motion.div
-              key={doc.id}
+        <LogoLoader compact label="AI Study Hub" sublabel={t("loadingDocuments")} />
+      ) : viewMode === "grid" ? (
+        <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleFolders.map((folder) => (
+            <motion.button
+              key={`folder-${folder.id}`}
               variants={item}
-              layout
-              onClick={() => viewDocument(doc)}
-              className={`glass-card rounded-xl overflow-hidden hover:border-primary/30 transition-all cursor-pointer group ${
-                viewMode === "list" ? "p-4" : "p-4"
-              }`}
-              whileHover={{ y: -4 }}
+              onClick={() => setSelectedFolderId(String(folder.id))}
+              className="rounded-xl border border-border/70 bg-background p-4 text-left shadow-sm transition-all hover:border-primary/40 hover:bg-secondary/30"
             >
-              {viewMode === "grid" ? (
-                <div className="space-y-3">
-                  <div className="aspect-[4/3] rounded-lg bg-secondary/50 flex items-center justify-center relative overflow-hidden">
-                    <FileText className="w-12 h-12 text-muted-foreground/50" />
-                    <motion.div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3 gap-2">
-                      <motion.button
-                        onClick={(event) => { event.stopPropagation(); viewDocument(doc) }}
-                        className="p-2 rounded-lg bg-secondary/80 text-foreground"
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </motion.button>
-                      <motion.button
-                        onClick={(event) => { event.stopPropagation(); downloadDocument(doc) }}
-                        className="p-2 rounded-lg bg-secondary/80 text-foreground"
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Download className="w-4 h-4" />
-                      </motion.button>
-                      <motion.button
-                        onClick={(event) => { event.stopPropagation(); shareDocument(doc) }}
-                        className="p-2 rounded-lg bg-secondary/80 text-foreground"
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </motion.button>
-                      {canManageDocument(doc) && (
-                        <motion.button
-                          onClick={(event) => { event.stopPropagation(); deleteDocument(doc.id) }}
-                          className="p-2 rounded-lg bg-destructive/15 text-destructive"
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                        >
-                          <X className="w-4 h-4" />
-                        </motion.button>
-                      )}
-                    </motion.div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/15 text-orange-600">
+                    <Folder className="h-7 w-7 fill-orange-500/20" />
                   </div>
-
                   <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                        {doc.title || doc.originalFileName}
-                      </p>
-                      <motion.button
-                        onClick={(e) => { e.stopPropagation(); toggleFavorite(doc.id) }}
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Star className={`w-4 h-4 ${doc.favorite ? "text-chart-4 fill-chart-4" : "text-muted-foreground"}`} />
-                      </motion.button>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-xs">
-                        {doc.subjectName || t("uncategorized")}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                      <span>{formatDate(doc.createdAt, language)}</span>
-                      <span>{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
-                    </div>
+                    <p className="font-semibold text-foreground">{folder.name}</p>
+                    <p className="text-sm text-muted-foreground">{folder.documentCount} {copy.documentCount}{folder.documentCount === 1 ? "" : "s"}</p>
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                      {doc.title || doc.originalFileName}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3 mt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-xs">
-                        {doc.subjectName || t("uncategorized")}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt, language)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
-                    <motion.button
-                      onClick={() => toggleFavorite(doc.id)}
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      <Star className={`w-4 h-4 ${doc.favorite ? "text-chart-4 fill-chart-4" : "text-muted-foreground"}`} />
-                    </motion.button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <motion.button
-                          className="p-1 rounded-lg hover:bg-secondary"
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                        >
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                        </motion.button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="glass-card border-border/50">
-                        <DropdownMenuItem onClick={() => viewDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Eye className="w-4 h-4" /> {t("view")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => downloadDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Download className="w-4 h-4" /> {t("download")}
-                        </DropdownMenuItem>
-                        {canManageDocument(doc) && (
-                          <DropdownMenuItem onClick={() => openEditDialog(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                            <Edit3 className="w-4 h-4" /> {t("editDetails")}
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => shareDocument(doc)} className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Share2 className="w-4 h-4" /> {t("share")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-muted-foreground hover:text-foreground focus:text-foreground cursor-pointer gap-2">
-                          <Tag className="w-4 h-4" /> {t("addTag")}
-                        </DropdownMenuItem>
-                        {canManageDocument(doc) && (
-                          <DropdownMenuItem onClick={() => deleteDocument(doc.id)} className="text-destructive focus:text-destructive cursor-pointer gap-2">
-                            <X className="w-4 h-4" /> {t("delete")}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              )}
-            </motion.div>
+                <span className="text-xs text-muted-foreground">{formatFileSize(folder.totalSize, "0 KB")}</span>
+              </div>
+            </motion.button>
           ))}
+          {filteredDocuments.map((doc) => {
+            const kind = getFileKind(doc)
+            return (
+              <motion.div
+                key={doc.id}
+                variants={item}
+                className="rounded-xl border border-border/70 bg-background p-4 shadow-sm transition-all hover:border-primary/40 hover:bg-secondary/30"
+              >
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={() => viewDocument(doc)}
+                    className="shrink-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <DocumentFileIcon fileName={doc.originalFileName} kind={kind} />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => viewDocument(doc)}
+                      className="block max-w-full truncate text-left font-semibold text-foreground hover:text-primary"
+                    >
+                      {doc.title || doc.originalFileName}
+                    </button>
+                    <p className="mt-1 text-sm uppercase text-muted-foreground">{getExtension(doc.originalFileName)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <span>{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
+                      <span>{formatRelativeTime(doc.createdAt, now, language)}</span>
+                      {doc.folderName && <span>{doc.folderName}</span>}
+                    </div>
+                  </div>
+                  <DocumentActions
+                    doc={doc}
+                    canManage={canManageDocument(doc)}
+                    canMove={canMoveDocument(doc)}
+                    onView={() => viewDocument(doc)}
+                    onDownload={() => downloadDocument(doc)}
+                    onShare={() => shareDocument(doc)}
+                    onEdit={() => openEditDialog(doc)}
+                    onMove={() => openMoveDialog(doc)}
+                    onDelete={() => deleteDocument(doc.id)}
+                    onFavorite={() => toggleFavorite(doc.id)}
+                    t={t}
+                    copy={copy}
+                  />
+                </div>
+              </motion.div>
+            )
+          })}
+        </motion.div>
+      ) : (
+        <motion.div variants={item} className="overflow-x-auto rounded-xl border border-border/70 bg-background shadow-sm">
+          <div className="grid min-w-[780px] grid-cols-[48px_minmax(260px,1fr)_140px_190px_96px] items-center bg-secondary/55 px-4 py-3 text-sm font-medium text-muted-foreground">
+            <input type="checkbox" aria-label="Select all" className="h-4 w-4 rounded border-border" />
+            <span>{copy.fileName}</span>
+            <span>{copy.size}</span>
+            <span>{copy.dateCreated}</span>
+            <span className="text-right"> </span>
+          </div>
+
+          {visibleFolders.map((folder) => (
+            <div
+              key={`folder-row-${folder.id}`}
+              className="grid min-w-[780px] cursor-pointer grid-cols-[48px_minmax(260px,1fr)_140px_190px_96px] items-center border-t border-border/60 px-4 py-4 transition-colors hover:bg-secondary/35"
+              onClick={() => setSelectedFolderId(String(folder.id))}
+            >
+              <input
+                type="checkbox"
+                aria-label={`Select ${folder.name}`}
+                className="h-4 w-4 rounded border-border"
+                onClick={(event) => event.stopPropagation()}
+              />
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-600">
+                  <Folder className="h-8 w-8 fill-orange-500/20" />
+                  <span className="absolute bottom-1 right-1 h-2 w-2 rounded-full bg-orange-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">{folder.name}</p>
+                  <p className="text-sm text-muted-foreground">{folder.documentCount} {copy.documentCount}{folder.documentCount === 1 ? "" : "s"}</p>
+                </div>
+              </div>
+              <span className="text-sm text-foreground">{formatFileSize(folder.totalSize, "0 KB")}</span>
+              <div className="text-sm">
+                <p className="font-medium text-foreground">{formatRelativeTime(folder.createdAt, now, language)}</p>
+                <p className="text-muted-foreground">{formatExactDateTime(folder.createdAt, language)}</p>
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(event) => event.stopPropagation()}
+                      className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      aria-label="Folder actions"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="glass-card border-border/50">
+                    <DropdownMenuItem onClick={() => setSelectedFolderId(String(folder.id))} className="cursor-pointer gap-2">
+                      <Folder className="h-4 w-4" /> {copy.openFolder}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          ))}
+
+          {filteredDocuments.map((doc) => {
+            const kind = getFileKind(doc)
+            return (
+              <div
+                key={`doc-row-${doc.id}`}
+                className="grid min-w-[780px] cursor-pointer grid-cols-[48px_minmax(260px,1fr)_140px_190px_96px] items-center border-t border-border/60 px-4 py-4 transition-colors hover:bg-secondary/35"
+                onClick={() => viewDocument(doc)}
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${doc.title || doc.originalFileName}`}
+                  className="h-4 w-4 rounded border-border"
+                  onClick={(event) => event.stopPropagation()}
+                />
+                <div className="flex min-w-0 items-center gap-4">
+                  <DocumentFileIcon fileName={doc.originalFileName} kind={kind} />
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-foreground">{doc.title || doc.originalFileName}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <span className="uppercase">{getExtension(doc.originalFileName)}</span>
+                      {doc.folderName && (
+                        <>
+                          <span>in</span>
+                          <span className="rounded-md bg-secondary px-2 py-0.5 text-xs text-foreground">{doc.folderName}</span>
+                        </>
+                      )}
+                      <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs text-accent">{documentStatus(doc.status)}</span>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-sm text-foreground">{formatFileSize(doc.fileSize, t("unknownSize"))}</span>
+                <div className="text-sm">
+                  <p className="font-medium text-foreground">{formatRelativeTime(doc.createdAt, now, language)}</p>
+                  <p className="text-muted-foreground">{formatExactDateTime(doc.createdAt, language)}</p>
+                </div>
+                <div className="flex items-center justify-end gap-3" onClick={(event) => event.stopPropagation()}>
+                  <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                  <DocumentActions
+                    doc={doc}
+                    canManage={canManageDocument(doc)}
+                    canMove={canMoveDocument(doc)}
+                    onView={() => viewDocument(doc)}
+                    onDownload={() => downloadDocument(doc)}
+                    onShare={() => shareDocument(doc)}
+                    onEdit={() => openEditDialog(doc)}
+                    onMove={() => openMoveDialog(doc)}
+                    onDelete={() => deleteDocument(doc.id)}
+                    onFavorite={() => toggleFavorite(doc.id)}
+                    t={t}
+                    copy={copy}
+                  />
+                </div>
+              </div>
+            )
+          })}
+
+          {visibleFolders.length === 0 && filteredDocuments.length === 0 && (
+            <div className="border-t border-border/60 px-6 py-16 text-center">
+              <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+              <p className="font-medium text-foreground">{t("noDocuments")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("noDocumentsSubtext")}</p>
+            </div>
+          )}
+
+          {(visibleFolders.length > 0 || filteredDocuments.length > 0) && (
+            <div className="border-t border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+              {copy.nothingMore}
+            </div>
+          )}
         </motion.div>
       )}
 
       <AnimatePresence>
-        {editingDoc && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-            onClick={() => setEditingDoc(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="glass-card w-full max-w-lg rounded-xl p-6"
-              onClick={(event) => event.stopPropagation()}
+        {createFolderOpen && (
+          <ModalFrame onClose={() => setCreateFolderOpen(false)}>
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">{copy.createFolder}</h2>
+                <p className="text-sm text-muted-foreground">Create a place to keep related documents together.</p>
+              </div>
+              <button
+                onClick={() => setCreateFolderOpen(false)}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mb-2 block text-sm font-medium text-foreground">{copy.folderName}</label>
+            <input
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  createFolder()
+                }
+              }}
+              className="w-full rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+              placeholder="Java MVC, Algorithms, IELTS..."
+              autoFocus
+            />
+            {createFolderError && (
+              <p className="mt-2 text-sm text-destructive">{createFolderError}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setCreateFolderOpen(false)}
+                className="rounded-xl border border-border/60 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                onClick={createFolder}
+                disabled={isCreatingFolder}
+                className="rounded-xl bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-60"
+              >
+                {isCreatingFolder ? t("pleaseWait") : copy.create}
+              </button>
+            </div>
+          </ModalFrame>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {movingDoc && (
+          <ModalFrame onClose={() => setMovingDoc(null)}>
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">{copy.moveToFolder}</h2>
+                <p className="max-w-sm truncate text-sm text-muted-foreground">{movingDoc.title || movingDoc.originalFileName}</p>
+              </div>
+              <button
+                onClick={() => setMovingDoc(null)}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mb-2 block text-sm font-medium text-foreground">{copy.allFolders}</label>
+            <select
+              value={moveTargetFolderId}
+              onChange={(event) => setMoveTargetFolderId(event.target.value)}
+              className="w-full rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
             >
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">{t("editDocument")}</h2>
-                  <p className="text-sm text-muted-foreground">{editingDoc.originalFileName}</p>
-                </div>
-                <button
-                  onClick={() => setEditingDoc(null)}
-                  className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              <option value="">{copy.outsideFolder}</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>{folder.name}</option>
+              ))}
+            </select>
+            {moveError && (
+              <p className="mt-2 text-sm text-destructive">{moveError}</p>
+            )}
 
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">{t("title")}</label>
-                  <input
-                    value={editTitle}
-                    onChange={(event) => setEditTitle(event.target.value)}
-                    className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">{t("description")}</label>
-                  <textarea
-                    value={editDescription}
-                    onChange={(event) => setEditDescription(event.target.value)}
-                    rows={3}
-                    className="w-full resize-none rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">{t("visibility")}</label>
-                  <select
-                    value={editVisibility}
-                    onChange={(event) => setEditVisibility(event.target.value)}
-                    className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="PRIVATE">{t("private")}</option>
-                    <option value="PUBLIC">{t("public")}</option>
-                    <option value="SHARED">{t("shared")}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">{t("subjects")}</label>
-                  <select
-                    value={editSubjectId}
-                    onChange={(event) => setEditSubjectId(event.target.value)}
-                    className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2.5 text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">{t("uncategorized")}</option>
-                    {availableSubjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>
-                        {subject.name} ({subject.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setMovingDoc(null)}
+                className="rounded-xl border border-border/60 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                onClick={moveDocumentToFolder}
+                className="rounded-xl bg-foreground px-4 py-2 text-sm font-semibold text-background"
+              >
+                {copy.move}
+              </button>
+            </div>
+          </ModalFrame>
+        )}
+      </AnimatePresence>
 
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => setEditingDoc(null)}
-                  className="rounded-xl border border-border/50 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  onClick={saveEdit}
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-                >
-                  {t("saveChanges")}
-                </button>
+      <AnimatePresence>
+        {editingDoc && (
+          <ModalFrame onClose={() => setEditingDoc(null)}>
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">{t("editDocument")}</h2>
+                <p className="text-sm text-muted-foreground">{editingDoc.originalFileName}</p>
               </div>
-            </motion.div>
-          </motion.div>
+              <button
+                onClick={() => setEditingDoc(null)}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">{t("title")}</label>
+                <input
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  className="w-full rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">{t("description")}</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(event) => setEditDescription(event.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">{t("visibility")}</label>
+                <select
+                  value={editVisibility}
+                  onChange={(event) => setEditVisibility(event.target.value)}
+                  className="w-full rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                >
+                  <option value="PRIVATE">{t("private")}</option>
+                  <option value="PUBLIC">{t("public")}</option>
+                  <option value="SHARED">{t("shared")}</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">{t("subjects")}</label>
+                <select
+                  value={editSubjectId}
+                  onChange={(event) => setEditSubjectId(event.target.value)}
+                  className="w-full rounded-xl border border-border/60 bg-secondary/40 px-4 py-2.5 text-foreground outline-none transition-all focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                >
+                  <option value="">{t("uncategorized")}</option>
+                  {availableSubjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name} ({subject.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setEditingDoc(null)}
+                className="rounded-xl border border-border/60 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                onClick={saveEdit}
+                className="rounded-xl bg-foreground px-4 py-2 text-sm font-semibold text-background"
+              >
+                {t("saveChanges")}
+              </button>
+            </div>
+          </ModalFrame>
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+function ModalFrame({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 16 }}
+        className="glass-card w-full max-w-lg rounded-xl p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function FilterDropdown({
+  value,
+  options,
+  onChange,
+  icon,
+  minWidth = "min-w-[150px]",
+  align = "start",
+}: {
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+  icon: React.ReactNode
+  minWidth?: string
+  align?: "start" | "end"
+}) {
+  const selected = options.find((option) => option.value === value) || options[0]
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex h-11 items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-secondary/70 focus:outline-none focus:ring-4 focus:ring-primary/10 ${minWidth}`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {icon}
+            <span className="truncate">{selected?.label}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} sideOffset={8} className="glass-card max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto border-border/50 p-1.5">
+        {options.map((option) => {
+          const isSelected = option.value === value
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => onChange(option.value)}
+              className={`cursor-pointer gap-2 rounded-lg px-3 py-2 text-sm ${
+                isSelected ? "bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary" : "text-muted-foreground focus:text-foreground"
+              }`}
+            >
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border"
+              }`}>
+                {isSelected && <Check className="h-3 w-3" />}
+              </span>
+              <span className="truncate">{option.label}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function DocumentActions({
+  doc,
+  canManage,
+  canMove,
+  onView,
+  onDownload,
+  onShare,
+  onEdit,
+  onMove,
+  onDelete,
+  onFavorite,
+  t,
+  copy,
+}: {
+  doc: DocumentDto
+  canManage: boolean
+  canMove: boolean
+  onView: () => void
+  onDownload: () => void
+  onShare: () => void
+  onEdit: () => void
+  onMove: () => void
+  onDelete: () => void
+  onFavorite: () => void
+  t: (key: string) => string
+  copy: Record<string, string>
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Document actions"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="glass-card min-w-48 border-border/50">
+        <DropdownMenuItem onClick={onView} className="cursor-pointer gap-2">
+          <Eye className="h-4 w-4" /> {t("view")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDownload} className="cursor-pointer gap-2">
+          <Download className="h-4 w-4" /> {t("download")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onShare} className="cursor-pointer gap-2">
+          <Share2 className="h-4 w-4" /> {t("share")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onFavorite} className="cursor-pointer gap-2">
+          <Star className={`h-4 w-4 ${doc.favorite ? "fill-chart-4 text-chart-4" : ""}`} /> {t("favorites")}
+        </DropdownMenuItem>
+        {canMove && (
+          <DropdownMenuItem onClick={onMove} className="cursor-pointer gap-2">
+            <MoveRight className="h-4 w-4" /> {copy.moveToFolder}
+          </DropdownMenuItem>
+        )}
+        {canManage && (
+          <DropdownMenuItem onClick={onEdit} className="cursor-pointer gap-2">
+            <Edit3 className="h-4 w-4" /> {t("editDetails")}
+          </DropdownMenuItem>
+        )}
+        {canManage && (
+          <DropdownMenuItem onClick={onDelete} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+            <Trash2 className="h-4 w-4" /> {t("delete")}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

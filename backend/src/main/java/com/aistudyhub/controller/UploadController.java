@@ -60,6 +60,7 @@ public class UploadController {
     public DocumentDto uploadDocument(
             @RequestParam Long ownerId,
             @RequestParam(required = false) Long workspaceId,
+            @RequestParam(required = false) Long folderId,
             @RequestParam MultipartFile file,
             HttpServletRequest request
     ) {
@@ -93,7 +94,8 @@ public class UploadController {
                     file.getContentType(),
                     file.getSize(),
                     null,
-                    "PRIVATE"
+                    "PRIVATE",
+                    folderId
             ));
             DocumentDto processed = documentAiService.processUploadedDocument(document, fileBytes);
             attachToWorkspaceIfNeeded(workspaceId, processed.id(), ownerId);
@@ -131,7 +133,8 @@ public class UploadController {
                 file.getContentType(),
                 file.getSize(),
                 null,
-                "PRIVATE"
+                "PRIVATE",
+                folderId
         ));
         DocumentDto processed = documentAiService.processUploadedDocument(document, fileBytes);
         attachToWorkspaceIfNeeded(workspaceId, processed.id(), ownerId);

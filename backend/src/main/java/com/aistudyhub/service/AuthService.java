@@ -1,9 +1,14 @@
 package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
+import com.aistudyhub.dto.auth.AccountActionResultDto;
+import com.aistudyhub.dto.auth.AccountSecurityDto;
 import com.aistudyhub.dto.auth.AuthResponse;
+import com.aistudyhub.dto.auth.ChangeEmailRequest;
+import com.aistudyhub.dto.auth.ChangePasswordRequest;
 import com.aistudyhub.dto.auth.ForgotPasswordRequest;
 import com.aistudyhub.dto.auth.GoogleLoginRequest;
+import com.aistudyhub.dto.auth.LinkGoogleAccountRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
@@ -29,6 +34,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -59,7 +65,7 @@ public class AuthService {
                     rs.getString("major"),
                     rs.getString("status"),
                     findRoles(userId),
-                    rs.getTimestamp("created_at").toLocalDateTime()
+                    toLocalDateTime(rs.getTimestamp("created_at"))
             );
         }
     };
@@ -149,12 +155,26 @@ public class AuthService {
 
     @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest request) {
+        ensureAccountSecuritySchema();
         GoogleProfile profile = verifyGoogleCredential(request.credential());
+        UserDto linkedUser = findByGoogleSubject(profile.googleSubject());
+        if (linkedUser != null) {
+            if (!"ACTIVE".equalsIgnoreCase(linkedUser.status())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "This account is not active");
+            }
+            refreshGoogleProfile(linkedUser.id(), profile);
+            UserDto user = findById(linkedUser.id());
+            return new AuthResponse(createDevelopmentToken(user.id()), user);
+        }
+
         UserDto existingUser = findByEmailAnyStatus(profile.email());
 
         if (existingUser != null) {
             if (!"ACTIVE".equalsIgnoreCase(existingUser.status())) {
                 throw new ApiException(HttpStatus.FORBIDDEN, "This account is not active");
+            }
+            if (googleSubjectOwnedByDifferentUser(profile.googleSubject(), existingUser.id())) {
+                throw new ApiException(HttpStatus.CONFLICT, "This Google account is already linked to another account");
             }
             refreshGoogleProfile(existingUser.id(), profile);
             jdbcTemplate.update("UPDATE users SET email_verified = 1, updated_at = SYSDATETIME() WHERE user_id = ?", existingUser.id());
@@ -169,7 +189,8 @@ public class AuthService {
                 profile.displayName(),
                 profile.email(),
                 passwordEncoder.encode(UUID.randomUUID().toString() + UUID.randomUUID()),
-                profile.pictureUrl());
+                profile.pictureUrl(),
+                profile.googleSubject());
 
         UserDto user = findByEmail(profile.email());
         assignRole(user.id(), "USER");
@@ -278,6 +299,27 @@ public class AuthService {
                 """, userMapper);
     }
 
+    public UserDto updateProfile(Long id, UpdateProfileRequest request) {
+        int updated = jdbcTemplate.update("""
+                UPDATE users
+                SET full_name = ?,
+                    university = ?,
+                    major = ?,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ? AND status <> 'DELETED'
+                """,
+                request.fullName().trim(),
+                blankToNull(request.university()),
+                blankToNull(request.major()),
+                id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return findById(id);
+    }
+
     public UserDto updateAvatar(Long id, String avatarUrl) {
         int updated = jdbcTemplate.update("""
                 UPDATE users
@@ -349,8 +391,25 @@ public class AuthService {
                 """, userMapper, email).stream().findFirst().orElse(null);
     }
 
+    private UserDto findByGoogleSubject(String googleSubject) {
+        return jdbcTemplate.query("""
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                FROM users
+                WHERE google_subject = ? AND status <> 'DELETED'
+                """, userMapper, googleSubject).stream().findFirst().orElse(null);
+    }
+
     private boolean emailExists(String email) {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE email = ? AND status <> 'DELETED'", Integer.class, email);
+        return count != null && count > 0;
+    }
+
+    private boolean emailExistsForDifferentUser(String email, Long userId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM users
+                WHERE LOWER(email) = LOWER(?) AND user_id <> ? AND status <> 'DELETED'
+                """, Integer.class, email, userId);
         return count != null && count > 0;
     }
 
@@ -380,6 +439,10 @@ public class AuthService {
                 WHERE ur.user_id = ?
                 ORDER BY r.role_name
                 """, String.class, userId);
+    }
+
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
     private String createDevelopmentToken(Long userId) {
@@ -486,6 +549,11 @@ public class AuthService {
         return value.matches("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
     }
 
+    private String accountActionUrl(String token, String requestFrontendUrl) {
+        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
+        return resetBaseUrl(requestFrontendUrl) + "/account/confirm?token=" + encodedToken;
+    }
+
     private String resetBaseUrl(String requestFrontendUrl) {
         String value = requestFrontendUrl == null || requestFrontendUrl.isBlank()
                 ? frontendUrl
@@ -558,9 +626,140 @@ public class AuthService {
                         WHEN (avatar_url IS NULL OR LTRIM(RTRIM(CAST(avatar_url AS NVARCHAR(MAX)))) = '') THEN ?
                         ELSE avatar_url
                     END,
+                    google_subject = ?,
+                    email_verified = 1,
+                    email_verified_at = COALESCE(email_verified_at, SYSDATETIME()),
                     updated_at = SYSDATETIME()
                 WHERE user_id = ?
-                """, profile.pictureUrl(), userId);
+                """, profile.pictureUrl(), profile.googleSubject(), userId);
+    }
+
+    private AccountRecipient findAccountRecipient(Long userId) {
+        return jdbcTemplate.query("""
+                SELECT user_id, full_name, email, password_hash
+                FROM users
+                WHERE user_id = ? AND status = 'ACTIVE'
+                """, (rs, rowNum) -> new AccountRecipient(
+                rs.getLong("user_id"),
+                rs.getString("full_name"),
+                rs.getString("email"),
+                rs.getString("password_hash")
+        ), userId).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Active user not found"));
+    }
+
+    private String createAccountActionToken(Long userId, String actionType, String newEmail) {
+        jdbcTemplate.update("""
+                UPDATE account_action_tokens
+                SET used = 1
+                WHERE user_id = ? AND action_type = ? AND used = 0
+                """, userId, actionType);
+
+        String token = UUID.randomUUID().toString() + UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO account_action_tokens (user_id, action_type, token, new_email, used, expired_at)
+                VALUES (?, ?, ?, ?, 0, DATEADD(MINUTE, 30, SYSDATETIME()))
+                """, userId, actionType, token, newEmail);
+        return token;
+    }
+
+    private AccountActionToken findValidAccountActionToken(String token) {
+        return jdbcTemplate.query("""
+                SELECT user_id, action_type, new_email
+                FROM account_action_tokens
+                WHERE token = ?
+                  AND used = 0
+                  AND expired_at > SYSDATETIME()
+                """, (rs, rowNum) -> new AccountActionToken(
+                rs.getLong("user_id"),
+                rs.getString("action_type"),
+                rs.getString("new_email")
+        ), token).stream().findFirst().orElse(null);
+    }
+
+    private void markAccountActionTokenUsed(String token) {
+        jdbcTemplate.update("""
+                UPDATE account_action_tokens
+                SET used = 1
+                WHERE token = ?
+                """, token);
+    }
+
+    private void deleteOwnAccount(Long userId) {
+        String anonymizedEmail = "deleted-user-%d-%s@deleted.local".formatted(userId, UUID.randomUUID());
+        jdbcTemplate.update("""
+                UPDATE users
+                SET full_name = ?,
+                    email = ?,
+                    password_hash = ?,
+                    avatar_url = NULL,
+                    phone = NULL,
+                    university = NULL,
+                    major = NULL,
+                    google_subject = NULL,
+                    email_verified = 0,
+                    email_verified_at = NULL,
+                    status = 'DELETED',
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """,
+                "Deleted User #" + userId,
+                anonymizedEmail,
+                UUID.randomUUID().toString() + UUID.randomUUID(),
+                userId);
+
+        jdbcTemplate.update("DELETE FROM notifications WHERE user_id = ?", userId);
+        jdbcTemplate.update("DELETE FROM password_reset_tokens WHERE user_id = ?", userId);
+        jdbcTemplate.update("DELETE FROM user_settings WHERE user_id = ?", userId);
+    }
+
+    private boolean googleSubjectOwnedByDifferentUser(String googleSubject, Long userId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM users
+                WHERE google_subject = ? AND user_id <> ? AND status <> 'DELETED'
+                """, Integer.class, googleSubject, userId);
+        return count != null && count > 0;
+    }
+
+    private String normalizeEmail(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private void ensureAccountSecuritySchema() {
+        boolean ready = tableExists("account_action_tokens")
+                && columnExists("users", "email_verified")
+                && columnExists("users", "email_verified_at")
+                && columnExists("users", "google_subject");
+        if (!ready) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Account security database schema is missing. Run database/add_account_security.sql.");
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.tables t
+                INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+                WHERE s.name = 'dbo' AND t.name = ?
+                """, Integer.class, tableName);
+        return count != null && count > 0;
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.columns c
+                WHERE c.object_id = OBJECT_ID(?) AND c.name = ?
+                """, Integer.class, "dbo." + tableName, columnName);
+        return count != null && count > 0;
     }
 
     private record GoogleProfile(
@@ -568,6 +767,21 @@ public class AuthService {
             String email,
             String displayName,
             String pictureUrl
+    ) {
+    }
+
+    private record AccountRecipient(
+            Long userId,
+            String fullName,
+            String email,
+            String passwordHash
+    ) {
+    }
+
+    private record AccountActionToken(
+            Long userId,
+            String actionType,
+            String newEmail
     ) {
     }
 }

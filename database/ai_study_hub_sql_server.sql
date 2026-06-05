@@ -5,7 +5,7 @@ CREATE TABLE [dbo].[achievements](
 	[description] [nvarchar](max) NULL,
 	[icon] [varchar](100) NULL,
 	[created_at] [datetime2](7) NULL,
-PRIMARY KEY CLUSTERED 
+PRIMARY KEY CLUSTERED
 (
 	[achievement_id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
@@ -24,7 +24,7 @@ CREATE TABLE [dbo].[activity_logs](
 	[entity_id] [bigint] NULL,
 	[description] [nvarchar](max) NULL,
 	[created_at] [datetime2](7) NULL,
-PRIMARY KEY CLUSTERED 
+PRIMARY KEY CLUSTERED
 (
 	[activity_id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
@@ -187,6 +187,25 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+CREATE TABLE [dbo].[document_folders](
+	[folder_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[owner_id] [bigint] NOT NULL,
+	[folder_name] [nvarchar](150) NOT NULL,
+	[status] [varchar](20) NOT NULL,
+	[created_at] [datetime2](7) NULL,
+	[updated_at] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED
+(
+	[folder_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF,
+ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[document_favorites]    Script Date: 21/05/2026 11:29:46 CH ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE TABLE [dbo].[document_favorites](
 	[user_id] [bigint] NOT NULL,
 	[document_id] [bigint] NOT NULL,
@@ -272,6 +291,7 @@ CREATE TABLE [dbo].[documents](
 	[document_id] [bigint] IDENTITY(1,1) NOT NULL,
 	[owner_id] [bigint] NOT NULL,
 	[subject_id] [bigint] NULL,
+	[folder_id] [bigint] NULL,
 	[category_id] [bigint] NULL,
 	[title] [nvarchar](255) NOT NULL,
 	[description] [nvarchar](max) NULL,
@@ -764,6 +784,12 @@ ALTER TABLE [dbo].[document_chunks] ADD  DEFAULT (sysdatetime()) FOR [created_at
 GO
 ALTER TABLE [dbo].[document_contents] ADD  DEFAULT ('PENDING') FOR [extraction_status]
 GO
+ALTER TABLE [dbo].[document_folders] ADD  DEFAULT ('ACTIVE') FOR [status]
+GO
+ALTER TABLE [dbo].[document_folders] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[document_folders] ADD  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
 ALTER TABLE [dbo].[document_favorites] ADD  DEFAULT (sysdatetime()) FOR [created_at]
 GO
 ALTER TABLE [dbo].[document_shares] ADD  DEFAULT ('VIEW') FOR [permission]
@@ -910,6 +936,15 @@ ON DELETE CASCADE
 GO
 ALTER TABLE [dbo].[document_contents] CHECK CONSTRAINT [fk_content_document]
 GO
+ALTER TABLE [dbo].[document_folders]  WITH CHECK ADD  CONSTRAINT [fk_document_folder_owner] FOREIGN KEY([owner_id])
+REFERENCES [dbo].[users] ([user_id])
+GO
+ALTER TABLE [dbo].[document_folders] CHECK CONSTRAINT [fk_document_folder_owner]
+GO
+ALTER TABLE [dbo].[document_folders]  WITH CHECK ADD  CONSTRAINT [chk_document_folder_status] CHECK  (([status]='DELETED' OR [status]='ACTIVE'))
+GO
+ALTER TABLE [dbo].[document_folders] CHECK CONSTRAINT [chk_document_folder_status]
+GO
 ALTER TABLE [dbo].[document_favorites]  WITH CHECK ADD  CONSTRAINT [fk_fav_document] FOREIGN KEY([document_id])
 REFERENCES [dbo].[documents] ([document_id])
 GO
@@ -969,6 +1004,11 @@ ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_owner] FO
 REFERENCES [dbo].[users] ([user_id])
 GO
 ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [fk_document_owner]
+GO
+ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_folder] FOREIGN KEY([folder_id])
+REFERENCES [dbo].[document_folders] ([folder_id])
+GO
+ALTER TABLE [dbo].[documents] CHECK CONSTRAINT [fk_document_folder]
 GO
 ALTER TABLE [dbo].[documents]  WITH CHECK ADD  CONSTRAINT [fk_document_subject] FOREIGN KEY([subject_id])
 REFERENCES [dbo].[subjects] ([subject_id])

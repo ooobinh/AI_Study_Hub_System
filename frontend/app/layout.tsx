@@ -15,6 +15,10 @@ export const metadata: Metadata = {
   title: 'AI Study Hub - Smart Learning Platform',
   description: 'AI-powered study management platform for university students. Upload documents, chat with AI, and track your learning progress.',
   keywords: ['study', 'AI', 'learning', 'documents', 'university', 'students'],
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    shortcut: ['/icon.svg'],
+  },
 }
 
 export const viewport: Viewport = {

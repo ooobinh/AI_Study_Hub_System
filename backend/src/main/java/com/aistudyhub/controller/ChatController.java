@@ -4,7 +4,9 @@ import com.aistudyhub.dto.chat.ChatMessageDto;
 import com.aistudyhub.dto.chat.ChatSessionDto;
 import com.aistudyhub.dto.chat.CreateChatSessionRequest;
 import com.aistudyhub.dto.chat.SendMessageRequest;
+import com.aistudyhub.dto.ai.GeminiStatusDto;
 import com.aistudyhub.service.ChatService;
+import com.aistudyhub.service.GeminiService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,9 +24,11 @@ import java.util.List;
 @RequestMapping("/api/chat")
 public class ChatController {
     private final ChatService chatService;
+    private final GeminiService geminiService;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, GeminiService geminiService) {
         this.chatService = chatService;
+        this.geminiService = geminiService;
     }
 
     @GetMapping("/sessions")
@@ -41,6 +45,11 @@ public class ChatController {
     @GetMapping("/sessions/{sessionId}/messages")
     public List<ChatMessageDto> messages(@PathVariable Long sessionId) {
         return chatService.listMessages(sessionId);
+    }
+
+    @GetMapping("/gemini/status")
+    public GeminiStatusDto geminiStatus() {
+        return geminiService.status();
     }
 
     @PostMapping("/sessions/{sessionId}/messages")

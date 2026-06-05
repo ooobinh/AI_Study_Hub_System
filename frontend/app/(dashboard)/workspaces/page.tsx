@@ -34,6 +34,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 type WorkspaceTab =
@@ -980,10 +981,7 @@ export default function WorkspacesPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-border/50 bg-secondary/20 py-14 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading workspaces...
-            </div>
+            <LogoLoader compact label="AI Study Hub" sublabel="Loading workspaces..." className="rounded-xl border border-border/50 bg-secondary/20" />
           ) : filteredWorkspaces.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 p-8 text-center">
               <UsersRound className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
@@ -1105,10 +1103,7 @@ export default function WorkspacesPage() {
               </div>
 
               {isDetailLoading && !detail ? (
-                <div className="flex items-center justify-center gap-2 rounded-xl border border-border/50 bg-secondary/20 py-14 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading workspace...
-                </div>
+                <LogoLoader compact label="AI Study Hub" sublabel="Loading workspace..." className="rounded-xl border border-border/50 bg-secondary/20" />
               ) : (
                 <>
                   {activeTab === "overview" && (

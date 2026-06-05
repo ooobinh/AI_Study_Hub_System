@@ -6,7 +6,7 @@ import { SidebarProvider } from "@/components/providers/sidebar-provider"
 import { useAuth } from "@/components/providers/auth-provider"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TopNav } from "@/components/layout/top-nav"
-import { FloatingAssistant } from "@/components/layout/floating-assistant"
+import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl } from "@/lib/api"
 
 export default function DashboardLayout({
@@ -39,9 +39,11 @@ export default function DashboardLayout({
 
   if (isLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-        Loading...
-      </div>
+      <LogoLoader
+        fullScreen
+        label="AI Study Hub"
+        sublabel="Checking your session"
+      />
     )
   }
 
@@ -55,7 +57,6 @@ export default function DashboardLayout({
             {children}
           </main>
         </div>
-        <FloatingAssistant />
       </div>
     </SidebarProvider>
   )

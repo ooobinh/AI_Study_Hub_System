@@ -9,6 +9,18 @@ public record UpdateDocumentRequest(
         String description,
         String visibility,
         String status,
-        Integer pageCount
+        Integer pageCount,
+        Long folderId
 ) {
+    public UpdateDocumentRequest(
+            Long subjectId,
+            Long categoryId,
+            String title,
+            String description,
+            String visibility,
+            String status,
+            Integer pageCount
+    ) {
+        this(subjectId, categoryId, title, description, visibility, status, pageCount, null);
+    }
 }
