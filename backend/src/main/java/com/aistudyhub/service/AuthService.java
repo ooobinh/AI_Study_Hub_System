@@ -335,27 +335,6 @@ public class AuthService {
                 """, userMapper);
     }
 
-    public UserDto updateProfile(Long id, UpdateProfileRequest request) {
-        int updated = jdbcTemplate.update("""
-                UPDATE users
-                SET full_name = ?,
-                    university = ?,
-                    major = ?,
-                    updated_at = SYSDATETIME()
-                WHERE user_id = ? AND status <> 'DELETED'
-                """,
-                request.fullName().trim(),
-                blankToNull(request.university()),
-                blankToNull(request.major()),
-                id);
-
-        if (updated == 0) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
-        }
-
-        return findById(id);
-    }
-
     public UserDto updateAvatar(Long id, String avatarUrl) {
         int updated = jdbcTemplate.update("""
                 UPDATE users
@@ -394,11 +373,15 @@ public class AuthService {
         String nextUniversity = sanitizeProfileText(request.university(), current.university());
         String nextMajor = sanitizeProfileText(request.major(), current.major());
 
-        jdbcTemplate.update("""
+        int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET full_name = ?, university = ?, major = ?, updated_at = SYSDATETIME()
                 WHERE user_id = ? AND status <> 'DELETED'
                 """, nextFullName, nextUniversity, nextMajor, id);
+
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+        }
         return findById(id);
     }
 
