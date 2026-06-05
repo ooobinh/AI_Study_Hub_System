@@ -7,6 +7,7 @@ import com.aistudyhub.dto.auth.AuthResponse;
 import com.aistudyhub.dto.auth.ChangeEmailRequest;
 import com.aistudyhub.dto.auth.ChangePasswordRequest;
 import com.aistudyhub.dto.auth.ForgotPasswordRequest;
+import com.aistudyhub.dto.auth.GithubLoginRequest;
 import com.aistudyhub.dto.auth.GoogleLoginRequest;
 import com.aistudyhub.dto.auth.LinkGoogleAccountRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
@@ -47,6 +48,8 @@ public class AuthService {
     private final ObjectMapper objectMapper;
     private final String frontendUrl;
     private final String googleClientId;
+    private final String githubClientId;
+    private final String githubClientSecret;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -75,13 +78,17 @@ public class AuthService {
             ResendEmailService resendEmailService,
             ObjectMapper objectMapper,
             @Value("${app.frontend.url}") String frontendUrl,
-            @Value("${app.google.client-id:}") String googleClientId
+            @Value("${app.google.client-id:}") String googleClientId,
+            @Value("${app.github.client-id:}") String githubClientId,
+            @Value("${app.github.client-secret:}") String githubClientSecret
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.resendEmailService = resendEmailService;
         this.objectMapper = objectMapper;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
         this.googleClientId = googleClientId;
+        this.githubClientId = githubClientId;
+        this.githubClientSecret = githubClientSecret;
     }
 
     @Transactional
@@ -162,6 +169,35 @@ public class AuthService {
 
         UserDto user = findByEmail(profile.email());
         assignRole(user.id(), "USER");
+        return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
+    }
+
+    @Transactional
+    public AuthResponse githubLogin(GithubLoginRequest request) {
+        GithubProfile profile = fetchGithubProfile(request.code(), request.redirectUri());
+        UserDto existingUser = findByEmailAnyStatus(profile.email());
+
+        if (existingUser != null) {
+            if (!"ACTIVE".equalsIgnoreCase(existingUser.status())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "This account is not active");
+            }
+            refreshGithubProfile(existingUser.id(), profile);
+            UserDto user = findById(existingUser.id());
+            return new AuthResponse(createDevelopmentToken(user.id()), user);
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO users (full_name, email, password_hash, avatar_url, status)
+                VALUES (?, ?, ?, ?, 'ACTIVE')
+                """,
+                profile.displayName(),
+                profile.email(),
+                passwordEncoder.encode(UUID.randomUUID().toString() + UUID.randomUUID()),
+                profile.pictureUrl());
+
+        UserDto user = findByEmail(profile.email());
+        assignRole(user.id(), "USER");
+        markEmailVerifiedIfSupported(user.id(), profile.emailVerified());
         return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
     }
 
@@ -588,6 +624,143 @@ public class AuthService {
         }
     }
 
+    private GithubProfile fetchGithubProfile(String code, String redirectUri) {
+        if (githubClientId == null || githubClientId.isBlank()
+                || githubClientSecret == null || githubClientSecret.isBlank()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GitHub login is not configured yet");
+        }
+
+        try {
+            String accessToken = exchangeGithubCode(code, redirectUri);
+            JsonNode user = githubGet("https://api.github.com/user", accessToken);
+            String githubId = user.path("id").asText("").trim();
+            if (githubId.isBlank() || "0".equals(githubId)) {
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "GitHub account could not be verified");
+            }
+
+            GithubEmail githubEmail = fetchGithubEmail(accessToken, user.path("email").asText(""));
+            String displayName = user.path("name").asText("").trim();
+            if (displayName.isBlank()) {
+                displayName = user.path("login").asText("").trim();
+            }
+            if (displayName.isBlank()) {
+                displayName = githubEmail.email().substring(0, githubEmail.email().indexOf("@"));
+            }
+
+            return new GithubProfile(
+                    githubEmail.email(),
+                    displayName,
+                    user.path("avatar_url").asText(null),
+                    githubEmail.verified()
+            );
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GitHub login verification was interrupted");
+        } catch (IOException exception) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Could not verify GitHub login right now");
+        }
+    }
+
+    private String exchangeGithubCode(String code, String redirectUri) throws IOException, InterruptedException {
+        String body = "client_id=" + encodeFormValue(githubClientId)
+                + "&client_secret=" + encodeFormValue(githubClientSecret)
+                + "&code=" + encodeFormValue(code)
+                + "&redirect_uri=" + encodeFormValue(redirectUri);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://github.com/login/oauth/access_token"))
+                .timeout(Duration.ofSeconds(12))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GitHub login is unavailable right now");
+        }
+
+        JsonNode payload = objectMapper.readTree(response.body());
+        if (payload.hasNonNull("error")) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    payload.path("error_description").asText("GitHub login failed")
+            );
+        }
+
+        String accessToken = payload.path("access_token").asText("").trim();
+        if (accessToken.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "GitHub login did not return an access token");
+        }
+
+        return accessToken;
+    }
+
+    private JsonNode githubGet(String url, String accessToken) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(12))
+                .header("Accept", "application/vnd.github+json")
+                .header("Authorization", "Bearer " + accessToken)
+                .header("User-Agent", "AI-Study-Hub")
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == 401 || response.statusCode() == 403) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "GitHub login token is invalid");
+        }
+        if (response.statusCode() != 200) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Could not read GitHub account details");
+        }
+
+        return objectMapper.readTree(response.body());
+    }
+
+    private GithubEmail fetchGithubEmail(String accessToken, String publicEmail)
+            throws IOException, InterruptedException {
+        JsonNode emails = githubGet("https://api.github.com/user/emails", accessToken);
+        GithubEmail primaryVerified = null;
+        GithubEmail firstVerified = null;
+
+        if (emails.isArray()) {
+            for (JsonNode item : emails) {
+                String email = normalizeEmail(item.path("email").asText(""));
+                boolean verified = item.path("verified").asBoolean(false);
+                boolean primary = item.path("primary").asBoolean(false);
+                if (email.isBlank() || !verified) {
+                    continue;
+                }
+                GithubEmail candidate = new GithubEmail(email, true);
+                if (primary) {
+                    primaryVerified = candidate;
+                    break;
+                }
+                if (firstVerified == null) {
+                    firstVerified = candidate;
+                }
+            }
+        }
+
+        if (primaryVerified != null) {
+            return primaryVerified;
+        }
+        if (firstVerified != null) {
+            return firstVerified;
+        }
+
+        String fallbackEmail = normalizeEmail(publicEmail);
+        if (!fallbackEmail.isBlank()) {
+            return new GithubEmail(fallbackEmail, false);
+        }
+
+        throw new ApiException(HttpStatus.UNAUTHORIZED, "GitHub account does not include a verified email");
+    }
+
+    private String encodeFormValue(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
+
     private boolean isGoogleEmailVerified(JsonNode value) {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return false;
@@ -608,6 +781,35 @@ public class AuthService {
                     updated_at = SYSDATETIME()
                 WHERE user_id = ?
                 """, profile.pictureUrl(), profile.googleSubject(), userId);
+    }
+
+    private void refreshGithubProfile(Long userId, GithubProfile profile) {
+        jdbcTemplate.update("""
+                UPDATE users
+                SET avatar_url = CASE
+                        WHEN (avatar_url IS NULL OR LTRIM(RTRIM(CAST(avatar_url AS NVARCHAR(MAX)))) = '') THEN ?
+                        ELSE avatar_url
+                    END,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, profile.pictureUrl(), userId);
+        markEmailVerifiedIfSupported(userId, profile.emailVerified());
+    }
+
+    private void markEmailVerifiedIfSupported(Long userId, boolean verified) {
+        if (!verified
+                || !columnExists("users", "email_verified")
+                || !columnExists("users", "email_verified_at")) {
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET email_verified = 1,
+                    email_verified_at = COALESCE(email_verified_at, SYSDATETIME()),
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, userId);
     }
 
     private AccountRecipient findAccountRecipient(Long userId) {
@@ -743,6 +945,20 @@ public class AuthService {
             String email,
             String displayName,
             String pictureUrl
+    ) {
+    }
+
+    private record GithubProfile(
+            String email,
+            String displayName,
+            String pictureUrl,
+            boolean emailVerified
+    ) {
+    }
+
+    private record GithubEmail(
+            String email,
+            boolean verified
     ) {
     }
 

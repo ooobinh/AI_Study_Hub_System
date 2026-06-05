@@ -8,6 +8,7 @@ import com.aistudyhub.dto.auth.AuthResponse;
 import com.aistudyhub.dto.auth.ChangeEmailRequest;
 import com.aistudyhub.dto.auth.ChangePasswordRequest;
 import com.aistudyhub.dto.auth.ForgotPasswordRequest;
+import com.aistudyhub.dto.auth.GithubLoginRequest;
 import com.aistudyhub.dto.auth.GoogleLoginRequest;
 import com.aistudyhub.dto.auth.LinkGoogleAccountRequest;
 import com.aistudyhub.dto.auth.LoginRequest;
@@ -61,6 +62,11 @@ public class AuthController {
     @PostMapping("/google")
     public AuthResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
         return authService.googleLogin(request);
+    }
+
+    @PostMapping("/github")
+    public AuthResponse githubLogin(@Valid @RequestBody GithubLoginRequest request) {
+        return authService.githubLogin(request);
     }
 
     @PostMapping("/forgot-password")
