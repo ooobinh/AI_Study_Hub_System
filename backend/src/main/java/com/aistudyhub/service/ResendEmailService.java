@@ -76,6 +76,26 @@ public class ResendEmailService {
         }
     }
 
+    public void sendEmailVerificationEmail(String toEmail, String fullName, String verifyUrl) {
+        if (!isConfigured()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Resend API is not configured");
+        }
+
+        String html = """
+                <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+                  <h2>Verify your AI Study Hub email</h2>
+                  <p>Hello %s,</p>
+                  <p>Please verify your email address to activate your account.</p>
+                  <p><a href="%s" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none">Verify email</a></p>
+                  <p>If the button does not work, open this link:</p>
+                  <p><a href="%s">%s</a></p>
+                  <p>This link expires in 30 minutes.</p>
+                </div>
+                """.formatted(escapeHtml(fullName), verifyUrl, verifyUrl, verifyUrl);
+
+        sendEmail(toEmail, "Verify your AI Study Hub email", html);
+    }
+
     public void sendWorkspaceInviteEmail(String toEmail, String workspaceName, String inviterName, String inviteUrl) {
         if (!isConfigured()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Resend API is not configured");

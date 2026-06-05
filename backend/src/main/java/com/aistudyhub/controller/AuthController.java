@@ -8,12 +8,14 @@ import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
 import com.aistudyhub.dto.auth.ResetPasswordRequest;
+import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.aistudyhub.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,9 +67,19 @@ public class AuthController {
         return authService.resetPassword(request);
     }
 
+    @GetMapping("/verify-email")
+    public MessageResponse verifyEmail(@RequestParam String token) {
+        return authService.verifyEmail(token);
+    }
+
     @GetMapping("/users/{id}")
     public UserDto user(@PathVariable Long id) {
         return authService.findById(id);
+    }
+
+    @PatchMapping("/users/{id}")
+    public UserDto updateProfile(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
+        return authService.updateProfile(id, request);
     }
 
     @PostMapping("/users/{id}/avatar")

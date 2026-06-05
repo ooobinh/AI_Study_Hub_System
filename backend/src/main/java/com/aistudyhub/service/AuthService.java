@@ -8,6 +8,7 @@ import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
 import com.aistudyhub.dto.auth.ResetPasswordRequest;
+import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -83,8 +85,8 @@ public class AuthService {
         }
 
         jdbcTemplate.update("""
-                INSERT INTO users (full_name, email, password_hash, university, major, status)
-                VALUES (?, ?, ?, ?, ?, 'ACTIVE')
+                INSERT INTO users (full_name, email, password_hash, university, major, status, email_verified)
+                VALUES (?, ?, ?, ?, ?, 'ACTIVE', 0)
                 """,
                 request.fullName(),
                 request.email(),
@@ -94,20 +96,54 @@ public class AuthService {
 
         UserDto user = findByEmail(request.email());
         assignRole(user.id(), "USER");
+        createEmailVerificationToken(user.id(), user.email(), user.fullName(), null);
         return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
     }
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        String hash = jdbcTemplate.query("""
-                SELECT password_hash FROM users WHERE email = ? AND status = 'ACTIVE'
-                """, rs -> rs.next() ? rs.getString("password_hash") : null, request.email());
+        String email = request.email() == null ? "" : request.email().trim().toLowerCase();
+        LoginUserRow row = jdbcTemplate.query("""
+                SELECT user_id, password_hash, status, email_verified, failed_login_count, locked_until
+                FROM users
+                WHERE email = ? AND status <> 'DELETED'
+                """, rs -> rs.next()
+                ? new LoginUserRow(
+                        rs.getLong("user_id"),
+                        rs.getString("password_hash"),
+                        rs.getString("status"),
+                        rs.getBoolean("email_verified"),
+                        rs.getInt("failed_login_count"),
+                        rs.getTimestamp("locked_until") == null ? null : rs.getTimestamp("locked_until").toLocalDateTime()
+                )
+                : null, email);
 
-        if (hash == null || !passwordMatches(request.email(), request.password(), hash)) {
+        if (row == null || !"ACTIVE".equalsIgnoreCase(row.status())) {
+            recordLoginAttempt(email, row == null ? null : row.userId(), false, "Invalid email or password");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
-        UserDto user = findByEmail(request.email());
+        if (row.lockedUntil() != null && row.lockedUntil().isAfter(LocalDateTime.now())) {
+            recordLoginAttempt(email, row.userId(), false, "Account locked");
+            throw new ApiException(HttpStatus.FORBIDDEN, "Account is locked. Try again later.");
+        }
+
+        if (!row.emailVerified()) {
+            recordLoginAttempt(email, row.userId(), false, "Email not verified");
+            throw new ApiException(HttpStatus.FORBIDDEN, "Please verify your email before signing in.");
+        }
+
+        if (row.passwordHash() == null || !passwordMatches(email, request.password(), row.passwordHash())) {
+            registerFailedLogin(row.userId(), email);
+            recordLoginAttempt(email, row.userId(), false, "Invalid email or password");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+
+        clearFailedLogin(row.userId());
+        recordLoginAttempt(email, row.userId(), true, "OK");
+        jdbcTemplate.update("UPDATE users SET last_login_at = SYSDATETIME(), updated_at = SYSDATETIME() WHERE user_id = ?", row.userId());
+
+        UserDto user = findById(row.userId());
         return new AuthResponse(createDevelopmentToken(user.id()), user);
     }
 
@@ -121,13 +157,14 @@ public class AuthService {
                 throw new ApiException(HttpStatus.FORBIDDEN, "This account is not active");
             }
             refreshGoogleProfile(existingUser.id(), profile);
+            jdbcTemplate.update("UPDATE users SET email_verified = 1, updated_at = SYSDATETIME() WHERE user_id = ?", existingUser.id());
             UserDto user = findById(existingUser.id());
             return new AuthResponse(createDevelopmentToken(user.id()), user);
         }
 
         jdbcTemplate.update("""
-                INSERT INTO users (full_name, email, password_hash, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'ACTIVE')
+                INSERT INTO users (full_name, email, password_hash, avatar_url, status, email_verified)
+                VALUES (?, ?, ?, ?, 'ACTIVE', 1)
                 """,
                 profile.displayName(),
                 profile.email(),
@@ -188,7 +225,7 @@ public class AuthService {
 
         jdbcTemplate.update("""
                 UPDATE users
-                SET password_hash = ?, updated_at = SYSDATETIME()
+                SET password_hash = ?, password_changed_at = SYSDATETIME(), updated_at = SYSDATETIME()
                 WHERE user_id = ?
                 """, passwordEncoder.encode(request.newPassword()), userId);
         jdbcTemplate.update("""
@@ -198,6 +235,29 @@ public class AuthService {
                 """, request.token());
 
         return new MessageResponse("Password has been reset. You can sign in now.");
+    }
+
+    @Transactional
+    public MessageResponse verifyEmail(String token) {
+        if (token == null || token.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Verification token is required");
+        }
+
+        Long userId = jdbcTemplate.query("""
+                SELECT user_id
+                FROM email_verification_tokens
+                WHERE token = ?
+                  AND used = 0
+                  AND expires_at > SYSDATETIME()
+                """, rs -> rs.next() ? rs.getLong("user_id") : null, token.trim());
+
+        if (userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Verification link is invalid or expired");
+        }
+
+        jdbcTemplate.update("UPDATE users SET email_verified = 1, updated_at = SYSDATETIME() WHERE user_id = ?", userId);
+        jdbcTemplate.update("UPDATE email_verification_tokens SET used = 1 WHERE token = ?", token.trim());
+        return new MessageResponse("Email verified. You can sign in now.");
     }
 
     public UserDto findById(Long id) {
@@ -243,6 +303,24 @@ public class AuthService {
             throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
         }
 
+        return findById(id);
+    }
+
+    @Transactional
+    public UserDto updateProfile(Long id, UpdateProfileRequest request) {
+        if (id == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "User id is required");
+        }
+        UserDto current = findById(id);
+        String nextFullName = sanitizeProfileText(request.fullName(), current.fullName());
+        String nextUniversity = sanitizeProfileText(request.university(), current.university());
+        String nextMajor = sanitizeProfileText(request.major(), current.major());
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET full_name = ?, university = ?, major = ?, updated_at = SYSDATETIME()
+                WHERE user_id = ? AND status <> 'DELETED'
+                """, nextFullName, nextUniversity, nextMajor, id);
         return findById(id);
     }
 
@@ -306,6 +384,85 @@ public class AuthService {
 
     private String createDevelopmentToken(Long userId) {
         return "dev-token-" + userId;
+    }
+
+    private void createEmailVerificationToken(Long userId, String email, String fullName, String requestFrontendUrl) {
+        // Invalidate previous unused tokens
+        jdbcTemplate.update("UPDATE email_verification_tokens SET used = 1 WHERE user_id = ? AND used = 0", userId);
+
+        String token = UUID.randomUUID().toString() + UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO email_verification_tokens (user_id, token, expires_at, used)
+                VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                """, userId, token);
+
+        String base = requestFrontendUrl == null || requestFrontendUrl.isBlank() ? frontendUrl : requestFrontendUrl;
+        String verifyUrl = base + "/verify-email?token=" + token;
+        try {
+            resendEmailService.sendEmailVerificationEmail(email, fullName, verifyUrl);
+        } catch (ApiException exception) {
+            // Do not fail registration if email cannot be sent in dev environments
+        }
+    }
+
+    private void registerFailedLogin(Long userId, String email) {
+        jdbcTemplate.update("""
+                UPDATE users
+                SET failed_login_count = failed_login_count + 1,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, userId);
+
+        Integer count = jdbcTemplate.queryForObject("SELECT failed_login_count FROM users WHERE user_id = ?", Integer.class, userId);
+        if (count != null && count >= 5) {
+            jdbcTemplate.update("""
+                    UPDATE users
+                    SET locked_until = DATEADD(MINUTE, 15, SYSDATETIME()),
+                        failed_login_count = 0,
+                        updated_at = SYSDATETIME()
+                    WHERE user_id = ?
+                    """, userId);
+        }
+    }
+
+    private void clearFailedLogin(Long userId) {
+        jdbcTemplate.update("""
+                UPDATE users
+                SET failed_login_count = 0,
+                    locked_until = NULL,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, userId);
+    }
+
+    private void recordLoginAttempt(String email, Long userId, boolean success, String message) {
+        jdbcTemplate.update("""
+                INSERT INTO auth_login_logs (email, user_id, success, ip_address, user_agent, message)
+                VALUES (?, ?, ?, NULL, NULL, ?)
+                """, email, userId, success ? 1 : 0, message == null ? "" : message);
+    }
+
+    private String sanitizeProfileText(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            return "";
+        }
+        // Allow letters, numbers, spaces and common punctuation.
+        String cleaned = trimmed.replaceAll("[^\\p{L}\\p{N} .,_@\\-()]", "");
+        return cleaned.length() > 150 ? cleaned.substring(0, 150) : cleaned;
+    }
+
+    private record LoginUserRow(
+            Long userId,
+            String passwordHash,
+            String status,
+            boolean emailVerified,
+            int failedLoginCount,
+            LocalDateTime lockedUntil
+    ) {
     }
 
     private boolean passwordMatches(String email, String rawPassword, String storedPassword) {
