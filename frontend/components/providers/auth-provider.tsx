@@ -67,7 +67,10 @@ async function requestAuth(path: string, body: Record<string, string>) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Authentication failed')
+    const fieldMessages = error?.fields && typeof error.fields === 'object'
+      ? Object.values(error.fields).filter((message): message is string => typeof message === 'string' && message.length > 0)
+      : []
+    throw new Error(fieldMessages[0] || error?.message || 'Authentication failed')
   }
 
   return response.json() as Promise<AuthResponse>
