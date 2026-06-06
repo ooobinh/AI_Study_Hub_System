@@ -283,7 +283,7 @@ public class AuthService {
         try {
             resendEmailService.sendPasswordResetEmail(user.email(), user.fullName(), resetUrl);
         } catch (ApiException exception) {
-            return new MessageResponse("Reset link was created, but email could not be sent: " + exception.getMessage());
+            throw exception;
         }
         return new MessageResponse("If that email exists, a password reset link has been sent.");
     }
