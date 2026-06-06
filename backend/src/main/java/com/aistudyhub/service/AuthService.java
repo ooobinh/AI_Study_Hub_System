@@ -299,6 +299,7 @@ public class AuthService {
         if (token == null || token.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Verification token is required");
         }
+        ensureEmailVerificationTokenSchema();
 
         Long userId = jdbcTemplate.query("""
                 SELECT user_id
@@ -469,14 +470,22 @@ public class AuthService {
     }
 
     private void createEmailVerificationToken(Long userId, String email, String fullName, String requestFrontendUrl) {
+        ensureEmailVerificationTokenSchema();
         // Invalidate previous unused tokens
         jdbcTemplate.update("UPDATE email_verification_tokens SET used = 1 WHERE user_id = ? AND used = 0", userId);
 
         String token = UUID.randomUUID().toString() + UUID.randomUUID();
-        jdbcTemplate.update("""
-                INSERT INTO email_verification_tokens (user_id, token, expires_at, used)
-                VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
-                """, userId, token);
+        if (columnExists("email_verification_tokens", "expired_at")) {
+            jdbcTemplate.update("""
+                    INSERT INTO email_verification_tokens (user_id, token, expires_at, expired_at, used)
+                    VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                    """, userId, token);
+        } else {
+            jdbcTemplate.update("""
+                    INSERT INTO email_verification_tokens (user_id, token, expires_at, used)
+                    VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                    """, userId, token);
+        }
 
         String base = requestFrontendUrl == null || requestFrontendUrl.isBlank() ? frontendUrl : requestFrontendUrl;
         String verifyUrl = base + "/verify-email?token=" + token;
@@ -928,6 +937,66 @@ public class AuthService {
         }
     }
 
+    private void ensureEmailVerificationTokenSchema() {
+        if (!tableExists("email_verification_tokens")) {
+            jdbcTemplate.execute("""
+                    CREATE TABLE [dbo].[email_verification_tokens](
+                        [token_id] [bigint] IDENTITY(1,1) NOT NULL,
+                        [user_id] [bigint] NOT NULL,
+                        [token] [varchar](255) NOT NULL,
+                        [expires_at] [datetime2](7) NOT NULL,
+                        [used] [bit] NOT NULL CONSTRAINT [DF_email_verification_tokens_used] DEFAULT ((0)),
+                        [created_at] [datetime2](7) NOT NULL CONSTRAINT [DF_email_verification_tokens_created_at] DEFAULT (sysdatetime()),
+                        CONSTRAINT [PK_email_verification_tokens] PRIMARY KEY CLUSTERED ([token_id] ASC),
+                        CONSTRAINT [UX_email_verification_tokens_token] UNIQUE NONCLUSTERED ([token] ASC),
+                        CONSTRAINT [FK_email_verification_tokens_user] FOREIGN KEY([user_id])
+                            REFERENCES [dbo].[users] ([user_id])
+                    )
+                    """);
+        }
+
+        if (!columnExists("email_verification_tokens", "expires_at")) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ADD [expires_at] [datetime2](7) NULL
+                    """);
+
+            if (columnExists("email_verification_tokens", "expired_at")) {
+                jdbcTemplate.execute("""
+                        UPDATE [dbo].[email_verification_tokens]
+                        SET [expires_at] = [expired_at]
+                        WHERE [expires_at] IS NULL
+                        """);
+            }
+
+            jdbcTemplate.execute("""
+                    UPDATE [dbo].[email_verification_tokens]
+                    SET [expires_at] = DATEADD(MINUTE, 30, SYSDATETIME())
+                    WHERE [expires_at] IS NULL
+                    """);
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ALTER COLUMN [expires_at] [datetime2](7) NOT NULL
+                    """);
+        }
+
+        if (columnExists("email_verification_tokens", "expired_at")
+                && !defaultConstraintExists("email_verification_tokens", "expired_at")) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ADD CONSTRAINT [DF_email_verification_tokens_expired_at]
+                    DEFAULT (DATEADD(MINUTE, 30, SYSDATETIME())) FOR [expired_at]
+                    """);
+        }
+
+        if (!indexExists("email_verification_tokens", "IX_email_verification_tokens_user_expires")) {
+            jdbcTemplate.execute("""
+                    CREATE NONCLUSTERED INDEX [IX_email_verification_tokens_user_expires]
+                    ON [dbo].[email_verification_tokens]([user_id], [used], [expires_at])
+                    """);
+        }
+    }
+
     private boolean tableExists(String tableName) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -938,11 +1007,33 @@ public class AuthService {
         return count != null && count > 0;
     }
 
+    private boolean indexExists(String tableName, String indexName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.indexes
+                WHERE [object_id] = OBJECT_ID(?) AND [name] = ?
+                """, Integer.class, "dbo." + tableName, indexName);
+        return count != null && count > 0;
+    }
+
     private boolean columnExists(String tableName, String columnName) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM sys.columns c
                 WHERE c.object_id = OBJECT_ID(?) AND c.name = ?
+                """, Integer.class, "dbo." + tableName, columnName);
+        return count != null && count > 0;
+    }
+
+    private boolean defaultConstraintExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.default_constraints dc
+                INNER JOIN sys.columns c
+                    ON c.object_id = dc.parent_object_id
+                   AND c.column_id = dc.parent_column_id
+                WHERE dc.parent_object_id = OBJECT_ID(?)
+                  AND c.name = ?
                 """, Integer.class, "dbo." + tableName, columnName);
         return count != null && count > 0;
     }
