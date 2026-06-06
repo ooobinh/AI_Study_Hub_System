@@ -1,6 +1,7 @@
 package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -66,7 +67,7 @@ public class ResendEmailService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "Resend email failed: " + response.body());
+                throw resendException(response.statusCode(), response.body());
             }
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not send reset email with Resend");
@@ -183,13 +184,42 @@ public class ResendEmailService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "Resend email failed: " + response.body());
+                throw resendException(response.statusCode(), response.body());
             }
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not send email with Resend");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Email request was interrupted");
+        }
+    }
+
+    private ApiException resendException(int statusCode, String responseBody) {
+        String message = extractResendMessage(responseBody);
+        if (statusCode == 403 && message.toLowerCase().contains("testing emails")) {
+            return new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "Resend is still in testing mode. You can only send to the Resend account email until you verify a domain at resend.com/domains and set RESEND_FROM_EMAIL to an email on that domain."
+            );
+        }
+
+        return new ApiException(
+                statusCode == 401 || statusCode == 403 ? HttpStatus.FORBIDDEN : HttpStatus.BAD_GATEWAY,
+                message.isBlank() ? "Resend could not send this email." : "Resend could not send this email: " + message
+        );
+    }
+
+    private String extractResendMessage(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return "";
+        }
+
+        try {
+            JsonNode json = objectMapper.readTree(responseBody);
+            String message = json.path("message").asText("");
+            return message == null ? "" : message;
+        } catch (IOException exception) {
+            return responseBody;
         }
     }
 
