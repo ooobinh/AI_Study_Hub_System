@@ -527,6 +527,7 @@ export default function SettingsPage() {
   const selectedTheme = mounted ? theme : "dark"
   const { firstName, lastName } = splitName(user?.name)
   const initials = [firstName, lastName].filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AI"
+  const isAdmin = user?.role === "admin"
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="mx-auto max-w-7xl space-y-8">
@@ -662,10 +663,20 @@ export default function SettingsPage() {
 
               <SettingRow
                 title="Email verification"
-                description={account?.emailVerified ? `Verified on ${formatDate(account.emailVerifiedAt)}` : "Confirm your email before sensitive account changes"}
+                description={
+                  account?.emailVerified
+                      ? `Verified on ${formatDate(account.emailVerifiedAt)}`
+                      : isAdmin
+                        ? "Admin accounts can verify email, but it is not required"
+                        : "Confirm your email before sensitive account changes"
+                }
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <StatusPill active={Boolean(account?.emailVerified)} activeText="Verified" inactiveText="Not verified" />
+                  <StatusPill
+                    active={Boolean(account?.emailVerified)}
+                    activeText="Verified"
+                    inactiveText={isAdmin ? "Optional" : "Not verified"}
+                  />
                   <button
                     type="button"
                     onClick={requestEmailVerification}
