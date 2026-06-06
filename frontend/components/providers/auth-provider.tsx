@@ -14,6 +14,8 @@ export interface User {
   avatarUrl?: string | null
   university?: string | null
   major?: string | null
+  emailVerified?: boolean
+  emailVerificationDeadline?: string | null
 }
 
 interface AuthContextType {
@@ -37,6 +39,8 @@ interface BackendUser {
   university?: string | null
   major?: string | null
   roles: string[]
+  emailVerified?: boolean
+  emailVerificationDeadline?: string | null
 }
 
 interface AuthResponse {
@@ -55,6 +59,8 @@ function mapUser(user: BackendUser): User {
     avatarUrl: user.avatarUrl,
     university: user.university,
     major: user.major,
+    emailVerified: user.emailVerified,
+    emailVerificationDeadline: user.emailVerificationDeadline,
   }
 }
 
