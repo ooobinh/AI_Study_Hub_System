@@ -65,7 +65,7 @@ export default function DashboardLayout({
     )
   }
 
-  const shouldShowEmailWarning = user.emailVerified === false
+  const shouldShowEmailWarning = user.role !== "admin" && user.emailVerified === false
   const hoursLeft = getHoursLeft(user.emailVerificationDeadline)
   const timeLeft = hoursLeft == null
     ? t("aboutOneDay")
