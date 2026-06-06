@@ -9,8 +9,8 @@ public record RegisterRequest(
         @NotBlank @Size(max = 100) String fullName,
         @NotBlank @Email @Size(max = 150) String email,
         @NotBlank
-        @Size(min = 8, max = 100)
-        @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$", message = "Password must contain at least 1 letter and 1 number")
+        @Size(min = 8, max = 100, message = "Password is too weak. Use at least 8 characters with letters and numbers.")
+        @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$", message = "Password is too weak. Use at least 8 characters with letters and numbers.")
         String password,
         @Size(max = 150) String university,
         @Size(max = 150) String major
