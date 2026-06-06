@@ -467,6 +467,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[subjects](
 	[subject_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[owner_id] [bigint] NULL,
 	[subject_code] [varchar](50) NOT NULL,
 	[subject_name] [nvarchar](150) NOT NULL,
 	[description] [nvarchar](max) NULL,
