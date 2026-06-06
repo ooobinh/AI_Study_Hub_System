@@ -64,6 +64,8 @@ public class AuthService {
         public UserDto mapRow(ResultSet rs, int rowNum) throws SQLException {
             Long userId = rs.getLong("user_id");
             LocalDateTime createdAt = toLocalDateTime(rs.getTimestamp("created_at"));
+            List<String> roles = findRoles(userId);
+            boolean isAdmin = roles.contains("ADMIN");
             return new UserDto(
                     userId,
                     rs.getString("full_name"),
@@ -72,10 +74,10 @@ public class AuthService {
                     rs.getString("university"),
                     rs.getString("major"),
                     rs.getString("status"),
-                    findRoles(userId),
+                    roles,
                     createdAt,
                     rs.getBoolean("email_verified"),
-                    createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
+                    isAdmin || createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
             );
         }
     };
@@ -345,16 +347,18 @@ public class AuthService {
                 FROM users
                 WHERE user_id = ? AND status = 'ACTIVE'
                 """, (rs, rowNum) -> {
+                    Long accountUserId = rs.getLong("user_id");
                     LocalDateTime createdAt = toLocalDateTime(rs.getTimestamp("created_at"));
                     String googleSubject = rs.getString("google_subject");
+                    boolean isAdmin = findRoles(accountUserId).contains("ADMIN");
                     return new AccountSecurityDto(
-                            rs.getLong("user_id"),
+                            accountUserId,
                             rs.getString("email"),
                             rs.getBoolean("email_verified"),
                             toLocalDateTime(rs.getTimestamp("email_verified_at")),
                             googleSubject != null && !googleSubject.isBlank(),
                             createdAt,
-                            createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
+                            isAdmin || createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
                     );
                 }, userId).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Active user not found"));
