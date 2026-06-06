@@ -79,6 +79,7 @@ interface AccountSecurity {
   emailVerifiedAt?: string | null
   googleLinked: boolean
   createdAt?: string | null
+  emailVerificationDeadline?: string | null
 }
 
 interface BackendUser {
@@ -232,9 +233,14 @@ export default function SettingsPage() {
       const security = body as AccountSecurity
       setAccount(security)
       setNewEmail(security.email)
-      if (security.email !== user.email) {
-        updateUserRef.current({ email: security.email })
-      }
+      const fallbackDeadline = security.createdAt
+        ? new Date(new Date(security.createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString()
+        : null
+      updateUserRef.current({
+        email: security.email,
+        emailVerified: security.emailVerified,
+        emailVerificationDeadline: security.emailVerificationDeadline || fallbackDeadline,
+      })
     } catch (err) {
       setSectionFeedback("account", "error", getNetworkErrorMessage(err))
     } finally {

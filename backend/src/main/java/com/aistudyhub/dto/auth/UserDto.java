@@ -12,6 +12,8 @@ public record UserDto(
         String major,
         String status,
         List<String> roles,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean emailVerified,
+        LocalDateTime emailVerificationDeadline
 ) {
 }
