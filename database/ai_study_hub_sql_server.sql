@@ -563,13 +563,191 @@ CREATE TABLE [dbo].[users](
 	[university] [nvarchar](150) NULL,
 	[major] [nvarchar](150) NULL,
 	[status] [varchar](20) NOT NULL,
+	[email_verified] [bit] NOT NULL CONSTRAINT [DF_users_email_verified] DEFAULT ((0)),
+	[email_verified_at] [datetime2](7) NULL,
+	[google_subject] [nvarchar](255) NULL,
+	[failed_login_count] [int] NOT NULL CONSTRAINT [DF_users_failed_login_count] DEFAULT ((0)),
+	[locked_until] [datetime2](7) NULL,
+	[password_changed_at] [datetime2](7) NULL,
+	[last_login_at] [datetime2](7) NULL,
 	[created_at] [datetime2](7) NULL,
 	[updated_at] [datetime2](7) NULL,
-PRIMARY KEY CLUSTERED 
+PRIMARY KEY CLUSTERED
 (
 	[user_id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[email_verification_tokens]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[email_verification_tokens](
+	[token_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[token] [varchar](255) NOT NULL,
+	[expires_at] [datetime2](7) NOT NULL,
+	[used] [bit] NOT NULL,
+	[created_at] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED
+(
+	[token_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [UX_email_verification_tokens_token] UNIQUE NONCLUSTERED
+(
+	[token] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [FK_email_verification_tokens_user] FOREIGN KEY([user_id])
+	REFERENCES [dbo].[users] ([user_id])
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_email_verification_tokens_user] ON [dbo].[email_verification_tokens]
+(
+	[user_id] ASC,
+	[used] ASC,
+	[expires_at] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[email_verification_tokens] ADD  CONSTRAINT [DF_email_verification_tokens_used] DEFAULT ((0)) FOR [used]
+GO
+ALTER TABLE [dbo].[email_verification_tokens] ADD  CONSTRAINT [DF_email_verification_tokens_created_at] DEFAULT (sysdatetime()) FOR [created_at]
+GO
+/****** Object:  Table [dbo].[auth_login_logs]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[auth_login_logs](
+	[log_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[email] [varchar](150) NULL,
+	[user_id] [bigint] NULL,
+	[success] [bit] NOT NULL,
+	[ip_address] [varchar](64) NULL,
+	[user_agent] [varchar](300) NULL,
+	[message] [varchar](300) NULL,
+	[created_at] [datetime2](7) NOT NULL CONSTRAINT [DF_auth_login_logs_created_at] DEFAULT (sysdatetime()),
+PRIMARY KEY CLUSTERED
+(
+	[log_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_auth_login_logs_email] ON [dbo].[auth_login_logs]([email] ASC) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_auth_login_logs_user] ON [dbo].[auth_login_logs]([user_id] ASC) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[user_sessions]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[user_sessions](
+	[session_id] [varchar](64) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[issued_at] [datetime2](7) NOT NULL,
+	[last_activity_at] [datetime2](7) NOT NULL,
+	[expires_at] [datetime2](7) NOT NULL,
+	[revoked_at] [datetime2](7) NULL,
+	[revoke_reason] [varchar](120) NULL,
+	[ip_address] [varchar](64) NULL,
+	[user_agent] [varchar](300) NULL,
+PRIMARY KEY CLUSTERED
+(
+	[session_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [fk_user_sessions_user] FOREIGN KEY([user_id])
+	REFERENCES [dbo].[users] ([user_id]) ON DELETE CASCADE
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_user_sessions_user] ON [dbo].[user_sessions]([user_id] ASC) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[admin_reauth_tokens]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[admin_reauth_tokens](
+	[token_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[admin_id] [bigint] NOT NULL,
+	[token] [varchar](200) NOT NULL,
+	[expires_at] [datetime2](7) NOT NULL,
+	[used] [bit] NOT NULL CONSTRAINT [DF_admin_reauth_tokens_used] DEFAULT ((0)),
+	[created_at] [datetime2](7) NOT NULL CONSTRAINT [DF_admin_reauth_tokens_created_at] DEFAULT (sysdatetime()),
+PRIMARY KEY CLUSTERED
+(
+	[token_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [fk_admin_reauth_tokens_admin] FOREIGN KEY([admin_id])
+	REFERENCES [dbo].[users] ([user_id]) ON DELETE CASCADE
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_admin_reauth_tokens_token] ON [dbo].[admin_reauth_tokens]([token] ASC) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[system_settings]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[system_settings](
+	[setting_key] [varchar](120) NOT NULL,
+	[setting_value] [varchar](500) NULL,
+	[updated_at] [datetime2](7) NOT NULL CONSTRAINT [DF_system_settings_updated_at] DEFAULT (sysdatetime()),
+PRIMARY KEY CLUSTERED
+(
+	[setting_key] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+INSERT [dbo].[system_settings] ([setting_key], [setting_value]) VALUES (N'upload.allowed_extensions', N'pdf,docx,pptx')
+GO
+INSERT [dbo].[system_settings] ([setting_key], [setting_value]) VALUES (N'upload.max_bytes', N'10485760')
+GO
+INSERT [dbo].[system_settings] ([setting_key], [setting_value]) VALUES (N'session.idle_minutes', N'60')
+GO
+INSERT [dbo].[system_settings] ([setting_key], [setting_value]) VALUES (N'session.max_minutes', N'720')
+GO
+/****** Object:  Table [dbo].[account_action_tokens]    Script Date: 06/06/2026 12:00:00 SA ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[account_action_tokens](
+	[token_id] [bigint] IDENTITY(1,1) NOT NULL,
+	[user_id] [bigint] NOT NULL,
+	[action_type] [varchar](30) NOT NULL,
+	[token] [varchar](255) NOT NULL,
+	[new_email] [nvarchar](150) NULL,
+	[used] [bit] NOT NULL CONSTRAINT [DF_account_action_tokens_used] DEFAULT ((0)),
+	[expired_at] [datetime2](7) NOT NULL,
+	[created_at] [datetime2](7) NOT NULL CONSTRAINT [DF_account_action_tokens_created_at] DEFAULT (sysdatetime()),
+PRIMARY KEY CLUSTERED
+(
+	[token_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [UX_account_action_tokens_token] UNIQUE NONCLUSTERED
+(
+	[token] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+CONSTRAINT [FK_account_action_tokens_user] FOREIGN KEY([user_id])
+	REFERENCES [dbo].[users] ([user_id]),
+CONSTRAINT [CHK_account_action_tokens_action_type] CHECK ([action_type] IN ('VERIFY_EMAIL', 'CHANGE_EMAIL', 'DELETE_ACCOUNT'))
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_account_action_tokens_user_action] ON [dbo].[account_action_tokens]
+(
+	[user_id] ASC,
+	[action_type] ASC,
+	[used] ASC,
+	[expired_at] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_users_google_subject] ON [dbo].[users]
+(
+	[google_subject] ASC
+)
+WHERE [google_subject] IS NOT NULL
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
 SET IDENTITY_INSERT [dbo].[achievements] ON 
 
