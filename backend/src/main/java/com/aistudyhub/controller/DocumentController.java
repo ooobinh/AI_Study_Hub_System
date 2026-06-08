@@ -61,6 +61,11 @@ public class DocumentController {
         return documentService.list(search, subjectId, userId);
     }
 
+    @GetMapping("/mine")
+    public List<DocumentDto> mine(@RequestParam Long userId) {
+        return documentService.listOwned(userId);
+    }
+
     @GetMapping("/folders")
     public List<DocumentFolderDto> folders(@RequestParam Long userId) {
         return documentService.listFolders(userId);
@@ -232,6 +237,5 @@ public class DocumentController {
     private record DownloadedDocumentFile(byte[] content, String contentType) {
     }
 }
-
 
 

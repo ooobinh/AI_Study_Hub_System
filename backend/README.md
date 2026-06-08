@@ -133,3 +133,5 @@ The database script stores this password as a BCrypt hash, not plain text. If yo
 The backend also upgrades a legacy plain-text password to BCrypt on the first successful login.
 
 If your deployed database was created before account deletion was added, run `../database/add_deleted_user_status.sql` once so SQL Server accepts the `DELETED` user status.
+
+If registration or email verification fails with `Invalid object name 'email_verification_tokens'`, run `../database/add_auth_p1_security.sql` once on the deployed SQL Server database. If you only need the missing token table, `../database/add_email_verification_tokens_compat.sql` creates/fixes that table without touching the rest of the P1 security schema.

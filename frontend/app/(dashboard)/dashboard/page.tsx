@@ -60,7 +60,7 @@ export default function DashboardPage() {
     if (!user) return
 
     Promise.all([
-      fetch(`${getApiUrl()}/api/documents?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
+      fetch(`${getApiUrl()}/api/documents/mine?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
       fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
     ])
       .then(([documentsData, subjectsData]: [DocumentDto[], SubjectDto[]]) => {

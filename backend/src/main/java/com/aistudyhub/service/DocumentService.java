@@ -120,6 +120,18 @@ public class DocumentService {
                 """, documentMapper, adminId);
     }
 
+    public List<DocumentDto> listOwned(Long userId) {
+        if (userId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "userId is required");
+        }
+
+        return jdbcTemplate.query(baseSelect() + """
+                WHERE d.status <> 'DELETED'
+                  AND d.owner_id = ?
+                ORDER BY d.created_at DESC
+                """, documentMapper, userId, userId);
+    }
+
     public DocumentDto findById(Long id, Long userId) {
         DocumentDto document = findByIdInternal(id, userId);
 
