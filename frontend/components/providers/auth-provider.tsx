@@ -14,6 +14,8 @@ export interface User {
   avatarUrl?: string | null
   university?: string | null
   major?: string | null
+  emailVerified?: boolean
+  emailVerificationDeadline?: string | null
 }
 
 interface AuthContextType {
@@ -21,6 +23,7 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   loginWithGoogleCredential: (credential: string) => Promise<void>
+  loginWithGithubCode: (code: string, redirectUri: string) => Promise<void>
   register: (fullName: string, email: string, password: string) => Promise<void>
   updateUser: (nextUser: Partial<User>) => void
   logout: () => void
@@ -36,6 +39,8 @@ interface BackendUser {
   university?: string | null
   major?: string | null
   roles: string[]
+  emailVerified?: boolean
+  emailVerificationDeadline?: string | null
 }
 
 interface AuthResponse {
@@ -54,6 +59,8 @@ function mapUser(user: BackendUser): User {
     avatarUrl: user.avatarUrl,
     university: user.university,
     major: user.major,
+    emailVerified: user.emailVerified,
+    emailVerificationDeadline: user.emailVerificationDeadline,
   }
 }
 
@@ -66,7 +73,10 @@ async function requestAuth(path: string, body: Record<string, string>) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Authentication failed')
+    const fieldMessages = error?.fields && typeof error.fields === 'object'
+      ? Object.values(error.fields).filter((message): message is string => typeof message === 'string' && message.length > 0)
+      : []
+    throw new Error(fieldMessages[0] || error?.message || 'Authentication failed')
   }
 
   return response.json() as Promise<AuthResponse>
@@ -113,6 +123,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('aiStudyHubToken', data.token)
   }
 
+  const loginWithGithubCode = async (code: string, redirectUri: string) => {
+    const data = await requestAuth('/api/auth/github', { code, redirectUri })
+    const newUser = mapUser(data.user)
+
+    setUser(newUser)
+    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
+    localStorage.setItem('aiStudyHubToken', data.token)
+  }
+
   const register = async (fullName: string, email: string, password: string) => {
     const data = await requestAuth('/api/auth/register', { fullName, email, password })
     const newUser = mapUser(data.user)
@@ -140,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogleCredential, loginWithGithubCode, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

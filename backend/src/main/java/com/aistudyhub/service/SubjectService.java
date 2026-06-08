@@ -22,6 +22,7 @@ public class SubjectService {
     }
 
     public List<SubjectDto> list(Long userId, String search) {
+        ensureSubjectOwnerColumn();
         Long effectiveUserId = userId == null ? -1L : userId;
         int admin = isAdminUser(userId) ? 1 : 0;
         String keyword = search == null || search.isBlank() ? "%" : "%" + search.trim() + "%";
@@ -36,11 +37,31 @@ public class SubjectService {
                              AND (
                                  ? = 1
                                  OR (? = -1 AND d.visibility = 'PUBLIC')
-                                 OR (? <> -1 AND (d.owner_id = ? OR d.visibility = 'PUBLIC'))
+                                 OR (? <> -1 AND d.owner_id = ?)
                              )
                        ) AS document_count
                 FROM subjects s
-                WHERE s.subject_name LIKE ? OR s.subject_code LIKE ?
+                WHERE (s.subject_name LIKE ? OR s.subject_code LIKE ?)
+                  AND (
+                      ? = 1
+                      OR (? = -1 AND EXISTS (
+                          SELECT 1
+                          FROM documents public_doc
+                          WHERE public_doc.subject_id = s.subject_id
+                            AND public_doc.status <> 'DELETED'
+                            AND public_doc.visibility = 'PUBLIC'
+                      ))
+                      OR (? <> -1 AND (
+                          s.owner_id = ?
+                          OR EXISTS (
+                              SELECT 1
+                              FROM documents own_doc
+                              WHERE own_doc.subject_id = s.subject_id
+                                AND own_doc.status <> 'DELETED'
+                                AND own_doc.owner_id = ?
+                          )
+                      ))
+                  )
                 ORDER BY document_count DESC, s.subject_name ASC
                 """,
                 this::mapSubject,
@@ -49,11 +70,17 @@ public class SubjectService {
                 effectiveUserId,
                 effectiveUserId,
                 keyword,
-                keyword);
+                keyword,
+                admin,
+                effectiveUserId,
+                effectiveUserId,
+                effectiveUserId,
+                effectiveUserId);
     }
 
     @Transactional
     public SubjectDto create(CreateSubjectRequest request, Long userId) {
+        ensureSubjectOwnerColumn();
         ensureActiveUser(userId);
 
         String name = request.subjectName().trim();
@@ -71,27 +98,28 @@ public class SubjectService {
         Integer existingNameCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM subjects
-                WHERE LOWER(subject_name) = LOWER(?)
-                """, Integer.class, name);
+                WHERE owner_id = ? AND LOWER(subject_name) = LOWER(?)
+                """, Integer.class, userId, name);
         if (existingNameCount != null && existingNameCount > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "Subject name already exists");
         }
 
         jdbcTemplate.update("""
-                INSERT INTO subjects (subject_code, subject_name, description)
-                VALUES (?, ?, ?)
-                """, code, name, description);
+                INSERT INTO subjects (owner_id, subject_code, subject_name, description)
+                VALUES (?, ?, ?, ?)
+                """, userId, code, name, description);
 
         Long id = jdbcTemplate.query("""
                 SELECT subject_id
                 FROM subjects
-                WHERE subject_code = ?
-                """, rs -> rs.next() ? rs.getLong("subject_id") : null, code);
+                WHERE owner_id = ? AND subject_code = ?
+                """, rs -> rs.next() ? rs.getLong("subject_id") : null, userId, code);
 
         return findById(id, userId);
     }
 
     public SubjectDto findById(Long id, Long userId) {
+        ensureSubjectOwnerColumn();
         Long effectiveUserId = userId == null ? -1L : userId;
         int admin = isAdminUser(userId) ? 1 : 0;
 
@@ -105,18 +133,43 @@ public class SubjectService {
                              AND (
                                  ? = 1
                                  OR (? = -1 AND d.visibility = 'PUBLIC')
-                                 OR (? <> -1 AND (d.owner_id = ? OR d.visibility = 'PUBLIC'))
+                                 OR (? <> -1 AND d.owner_id = ?)
                              )
                        ) AS document_count
                 FROM subjects s
                 WHERE s.subject_id = ?
+                  AND (
+                      ? = 1
+                      OR (? = -1 AND EXISTS (
+                          SELECT 1
+                          FROM documents public_doc
+                          WHERE public_doc.subject_id = s.subject_id
+                            AND public_doc.status <> 'DELETED'
+                            AND public_doc.visibility = 'PUBLIC'
+                      ))
+                      OR (? <> -1 AND (
+                          s.owner_id = ?
+                          OR EXISTS (
+                              SELECT 1
+                              FROM documents own_doc
+                              WHERE own_doc.subject_id = s.subject_id
+                                AND own_doc.status <> 'DELETED'
+                                AND own_doc.owner_id = ?
+                          )
+                      ))
+                  )
                 """,
                 this::mapSubject,
                 admin,
                 effectiveUserId,
                 effectiveUserId,
                 effectiveUserId,
-                id).stream().findFirst()
+                id,
+                admin,
+                effectiveUserId,
+                effectiveUserId,
+                effectiveUserId,
+                effectiveUserId).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Subject not found"));
     }
 
@@ -178,6 +231,26 @@ public class SubjectService {
                 Integer.class,
                 code
         );
+        return count != null && count > 0;
+    }
+
+    private void ensureSubjectOwnerColumn() {
+        if (columnExists("subjects", "owner_id")) {
+            return;
+        }
+
+        jdbcTemplate.execute("""
+                ALTER TABLE [dbo].[subjects]
+                ADD [owner_id] [bigint] NULL
+                """);
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.columns
+                WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Integer.class, "dbo." + tableName, columnName);
         return count != null && count > 0;
     }
 

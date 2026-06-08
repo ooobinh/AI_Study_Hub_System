@@ -8,6 +8,7 @@ public record AccountSecurityDto(
         boolean emailVerified,
         LocalDateTime emailVerifiedAt,
         boolean googleLinked,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime emailVerificationDeadline
 ) {
 }
