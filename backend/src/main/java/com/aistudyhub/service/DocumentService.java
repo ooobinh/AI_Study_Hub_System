@@ -123,6 +123,13 @@ public class DocumentService {
     public DocumentDto findById(Long id, Long userId) {
         DocumentDto document = findByIdInternal(id, userId);
 
+         if ("DELETED".equals(document.status())) {
+        throw new ApiException(
+                HttpStatus.NOT_FOUND,
+               "Document not found"
+       );
+     }
+
         if ("PRIVATE".equals(document.visibility())
                 && (userId == null || (!document.ownerId().equals(userId)
                 && !isAdminUser(userId)
