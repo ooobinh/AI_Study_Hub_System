@@ -427,7 +427,7 @@ export default function SettingsPage() {
     setActionLoading("profile")
     clearSectionFeedback("profile")
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/profile`, {
+     const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
