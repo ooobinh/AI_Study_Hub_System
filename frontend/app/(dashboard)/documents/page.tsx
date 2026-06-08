@@ -88,6 +88,7 @@ type DateRangeFilter = "all" | "today" | "7d" | "30d"
 type SortOrder = "newest" | "oldest" | "name" | "size"
 
 const MAX_UPLOAD_FILES = 10
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const SUPPORTED_UPLOAD_LABEL = "PDF, DOC, DOCX, PPT, PPTX"
 
 async function uploadFileToBackend(file: File, ownerId: string, folderId?: number | null): Promise<DocumentDto> {
@@ -410,8 +411,9 @@ export default function DocumentsPage() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxFiles: MAX_UPLOAD_FILES,
+    maxSize: 10 * 1024 * 1024,
     onDropRejected: () => {
-      setError(copy.tooManyFiles)
+     setError("File size must not exceed 10MB")
     },
     accept: {
       "application/pdf": [".pdf"],
