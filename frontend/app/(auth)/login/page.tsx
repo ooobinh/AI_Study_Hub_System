@@ -9,6 +9,7 @@ import { LogoLoader } from "@/components/layout/logo-loader"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { isValidPassword, passwordPolicyMessage } from "@/lib/validation"
 import { isValidEmail } from "@/lib/validation"
 
 type GoogleCredentialResponse = {
@@ -196,6 +197,10 @@ export default function AuthPage() {
     }
     if (!isValidEmail(email)) {
       setError(t("invalidEmailFormat"))
+      return
+    }
+    if (!isLogin && !isValidPassword(password)) {
+      setError(passwordPolicyMessage)
       return
     }
 
@@ -417,7 +422,7 @@ export default function AuthPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t("enterPassword")}
                   required
-                  minLength={6}
+                  minLength={isLogin ? 1 : 8}
                   className="w-full pl-11 pr-12 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
                 />
                 <button
