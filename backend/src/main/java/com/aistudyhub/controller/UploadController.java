@@ -6,6 +6,8 @@ import com.aistudyhub.dto.document.DocumentDto;
 import com.aistudyhub.dto.document.StorageStatusDto;
 import com.aistudyhub.service.DocumentAiService;
 import com.aistudyhub.service.DocumentService;
+import com.aistudyhub.service.DocumentUploadPolicyService;
+import com.aistudyhub.service.SubjectService;
 import com.aistudyhub.service.SupabaseStorageService;
 import com.aistudyhub.service.WorkspaceService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +30,8 @@ import java.util.UUID;
 public class UploadController {
     private final DocumentService documentService;
     private final DocumentAiService documentAiService;
+    private final DocumentUploadPolicyService uploadPolicyService;
+    private final SubjectService subjectService;
     private final SupabaseStorageService supabaseStorageService;
     private final WorkspaceService workspaceService;
     private final Path uploadDir;
@@ -35,12 +39,16 @@ public class UploadController {
     public UploadController(
             DocumentService documentService,
             DocumentAiService documentAiService,
+            DocumentUploadPolicyService uploadPolicyService,
+            SubjectService subjectService,
             SupabaseStorageService supabaseStorageService,
             WorkspaceService workspaceService,
             @Value("${app.upload.dir}") String uploadDir
     ) {
         this.documentService = documentService;
         this.documentAiService = documentAiService;
+        this.uploadPolicyService = uploadPolicyService;
+        this.subjectService = subjectService;
         this.supabaseStorageService = supabaseStorageService;
         this.workspaceService = workspaceService;
         this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
@@ -59,19 +67,26 @@ public class UploadController {
     @PostMapping("/documents")
     public DocumentDto uploadDocument(
             @RequestParam Long ownerId,
+            @RequestParam Long subjectId,
             @RequestParam(required = false) Long workspaceId,
             @RequestParam(required = false) Long folderId,
             @RequestParam MultipartFile file,
             HttpServletRequest request
     ) {
-        if (file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "File is empty");
+        if (subjectId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Subject is required");
         }
+
+        uploadPolicyService.validateDocumentFile(file);
+        subjectService.findById(subjectId, ownerId);
 
         String originalName = file.getOriginalFilename() == null ? "document" : file.getOriginalFilename();
         String title = originalName.contains(".")
                 ? originalName.substring(0, originalName.lastIndexOf('.'))
                 : originalName;
+        if (title.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Document title is required");
+        }
         byte[] fileBytes;
 
         try {
@@ -84,7 +99,7 @@ public class UploadController {
             SupabaseStorageService.StoredFile storedFile = supabaseStorageService.uploadDocument(ownerId, file);
             DocumentDto document = documentService.create(new CreateDocumentRequest(
                     ownerId,
-                    null,
+                    subjectId,
                     null,
                     title,
                     "",
@@ -123,7 +138,7 @@ public class UploadController {
 
         DocumentDto document = documentService.create(new CreateDocumentRequest(
                 ownerId,
-                null,
+                subjectId,
                 null,
                 title,
                 "",

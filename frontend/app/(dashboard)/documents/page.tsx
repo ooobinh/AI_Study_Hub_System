@@ -91,9 +91,15 @@ const MAX_UPLOAD_FILES = 10
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const SUPPORTED_UPLOAD_LABEL = "PDF, DOC, DOCX, PPT, PPTX"
 
-async function uploadFileToBackend(file: File, ownerId: string, folderId?: number | null): Promise<DocumentDto> {
+async function uploadFileToBackend(
+  file: File,
+  ownerId: string,
+  subjectId: number,
+  folderId?: number | null,
+): Promise<DocumentDto> {
   const formData = new FormData()
   formData.append("ownerId", ownerId)
+  formData.append("subjectId", String(subjectId))
   if (folderId) {
     formData.append("folderId", String(folderId))
   }
@@ -249,6 +255,7 @@ export default function DocumentsPage() {
   const [editDescription, setEditDescription] = useState("")
   const [editVisibility, setEditVisibility] = useState("PRIVATE")
   const [editSubjectId, setEditSubjectId] = useState("")
+  const [uploadSubjectId, setUploadSubjectId] = useState("")
 
   const copy = useMemo(() => ({
     title: t("documents"),
@@ -283,6 +290,10 @@ export default function DocumentsPage() {
     last7Days: language === "vi" ? "7 ngay" : "Last 7 days",
     last30Days: language === "vi" ? "30 ngay" : "Last 30 days",
     folderAlreadyOpen: language === "vi" ? "Dang xem folder nay" : "Current folder",
+    uploadSubject: language === "vi" ? "Mon hoc khi upload" : "Subject for upload",
+    selectSubjectBeforeUpload: language === "vi"
+      ? "Chon mon hoc truoc khi upload."
+      : "Select a subject before uploading.",
     uploadRules: language === "vi"
       ? `Ho tro ${SUPPORTED_UPLOAD_LABEL}. Toi da ${MAX_UPLOAD_FILES} tep moi lan upload.`
       : `Supports ${SUPPORTED_UPLOAD_LABEL}. Up to ${MAX_UPLOAD_FILES} files per upload.`,
@@ -353,6 +364,9 @@ export default function DocumentsPage() {
       setDocuments(personalDocuments)
       setAvailableSubjects(subjectsData)
       setFolders(folderData)
+      if (subjectsData.length > 0) {
+        setUploadSubjectId((current) => current || String(subjectsData[0].id))
+      }
     } catch (err) {
       setError(getNetworkErrorMessage(err))
     } finally {
@@ -371,6 +385,10 @@ export default function DocumentsPage() {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!user || acceptedFiles.length === 0) return
+    if (!uploadSubjectId) {
+      setError(copy.selectSubjectBeforeUpload)
+      return
+    }
 
     setError("")
     setUploadMessage("")
@@ -382,7 +400,7 @@ export default function DocumentsPage() {
         setUploadMessage(`${t("uploading")} ${file.name}...`)
 
         setUploadProgress(25)
-        const uploadedDoc = await uploadFileToBackend(file, user.id, uploadFolderId)
+        const uploadedDoc = await uploadFileToBackend(file, user.id, Number(uploadSubjectId), uploadFolderId)
         uploadedDocs.push(uploadedDoc)
         setDocuments(prev => [uploadedDoc, ...prev.filter(doc => doc.id !== uploadedDoc.id)])
         setUploadProgress(90)
@@ -406,7 +424,7 @@ export default function DocumentsPage() {
       setUploadProgress(null)
       setUploadMessage("")
     }, 1400)
-  }, [loadDocuments, t, uploadFolderId, user])
+  }, [copy.selectSubjectBeforeUpload, loadDocuments, t, uploadFolderId, uploadSubjectId, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -631,6 +649,19 @@ export default function DocumentsPage() {
         </div>
         <div className="flex flex-col items-start gap-2 md:items-end">
           <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={uploadSubjectId}
+              onChange={(event) => setUploadSubjectId(event.target.value)}
+              className="h-11 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/60"
+              aria-label={copy.uploadSubject}
+            >
+              <option value="">{copy.uploadSubject}</option>
+              {availableSubjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.name} ({subject.code})
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => setCreateFolderOpen(true)}

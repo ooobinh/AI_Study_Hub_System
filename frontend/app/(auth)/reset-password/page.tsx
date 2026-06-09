@@ -6,6 +6,7 @@ import { Suspense, useState } from "react"
 import { ArrowRight, Eye, EyeOff, Lock, Sparkles } from "lucide-react"
 import { LogoLoader } from "@/components/layout/logo-loader"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { isValidPassword, passwordPolicyMessage } from "@/lib/validation"
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams()
@@ -27,8 +28,8 @@ function ResetPasswordContent() {
       setError("Reset token is missing. Please request a new reset link.")
       return
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.")
+    if (!isValidPassword(password)) {
+      setError(passwordPolicyMessage)
       return
     }
     if (password !== confirmPassword) {
