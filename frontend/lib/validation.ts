@@ -8,8 +8,12 @@ export const emailFormatMessage = "Please enter a valid email address, for examp
 
 const passwordPattern = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
 
-export function isValidPassword(value: string) {
+export function isStrongPassword(value: string) {
   return passwordPattern.test(value)
+}
+
+export function isValidPassword(value: string) {
+  return isStrongPassword(value)
 }
 
 export const passwordPolicyMessage =

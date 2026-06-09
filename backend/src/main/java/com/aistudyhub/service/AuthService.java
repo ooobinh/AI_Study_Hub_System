@@ -2,6 +2,7 @@ package com.aistudyhub.service;
 
 import com.aistudyhub.common.ApiException;
 import com.aistudyhub.dto.auth.AccountActionResultDto;
+import com.aistudyhub.dto.auth.AccountActionUserRequest;
 import com.aistudyhub.dto.auth.AccountSecurityDto;
 import com.aistudyhub.dto.auth.AuthResponse;
 import com.aistudyhub.dto.auth.ChangeEmailRequest;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,8 @@ import java.util.UUID;
 
 @Service
 public class AuthService {
+    private static final int EMAIL_VERIFICATION_GRACE_DAYS = 1;
+
     private final JdbcTemplate jdbcTemplate;
     private final ResendEmailService resendEmailService;
     private final ObjectMapper objectMapper;
@@ -59,6 +63,9 @@ public class AuthService {
         @Override
         public UserDto mapRow(ResultSet rs, int rowNum) throws SQLException {
             Long userId = rs.getLong("user_id");
+            LocalDateTime createdAt = toLocalDateTime(rs.getTimestamp("created_at"));
+            List<String> roles = findRoles(userId);
+            boolean isAdmin = roles.contains("ADMIN");
             return new UserDto(
                     userId,
                     rs.getString("full_name"),
@@ -67,8 +74,10 @@ public class AuthService {
                     rs.getString("university"),
                     rs.getString("major"),
                     rs.getString("status"),
-                    findRoles(userId),
-                    toLocalDateTime(rs.getTimestamp("created_at"))
+                    roles,
+                    createdAt,
+                    rs.getBoolean("email_verified"),
+                    isAdmin || createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
             );
         }
     };
@@ -91,30 +100,46 @@ public class AuthService {
         this.githubClientSecret = githubClientSecret;
     }
 
+    @Scheduled(
+            fixedDelayString = "${app.auth.unverified-cleanup-delay-ms:3600000}",
+            initialDelayString = "${app.auth.unverified-cleanup-initial-delay-ms:300000}"
+    )
+    public void cleanupExpiredUnverifiedAccountsJob() {
+        deleteExpiredUnverifiedAccounts();
+    }
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (emailExists(request.email())) {
+        return register(request, null);
+    }
+
+    @Transactional
+    public AuthResponse register(RegisterRequest request, String requestFrontendUrl) {
+        deleteExpiredUnverifiedAccounts();
+        String email = normalizeEmail(request.email());
+        if (emailExists(email)) {
             throw new ApiException(HttpStatus.CONFLICT, "Email already exists");
         }
 
         jdbcTemplate.update("""
-                INSERT INTO users (full_name, email, password_hash, university, major, status, email_verified)
-                VALUES (?, ?, ?, ?, ?, 'ACTIVE', 0)
+                INSERT INTO users (full_name, email, password_hash, university, major, status, email_verified, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'ACTIVE', 0, SYSDATETIME(), SYSDATETIME())
                 """,
                 request.fullName(),
-                request.email(),
+                email,
                 passwordEncoder.encode(request.password()),
                 request.university(),
                 request.major());
 
-        UserDto user = findByEmail(request.email());
+        UserDto user = findByEmail(email);
         assignRole(user.id(), "USER");
-        createEmailVerificationToken(user.id(), user.email(), user.fullName(), null);
+        createEmailVerificationToken(user.id(), user.email(), user.fullName(), requestFrontendUrl);
         return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
     }
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        deleteExpiredUnverifiedAccounts();
         String email = request.email() == null ? "" : request.email().trim().toLowerCase();
         LoginUserRow row = jdbcTemplate.query("""
                 SELECT user_id, password_hash, status, email_verified, failed_login_count, locked_until
@@ -141,11 +166,6 @@ public class AuthService {
             throw new ApiException(HttpStatus.FORBIDDEN, "Account is locked. Try again later.");
         }
 
-        if (!row.emailVerified()) {
-            recordLoginAttempt(email, row.userId(), false, "Email not verified");
-            throw new ApiException(HttpStatus.FORBIDDEN, "Please verify your email before signing in.");
-        }
-
         if (row.passwordHash() == null || !passwordMatches(email, request.password(), row.passwordHash())) {
             registerFailedLogin(row.userId(), email);
             recordLoginAttempt(email, row.userId(), false, "Invalid email or password");
@@ -153,7 +173,7 @@ public class AuthService {
         }
 
         clearFailedLogin(row.userId());
-        recordLoginAttempt(email, row.userId(), true, "OK");
+        recordLoginAttempt(email, row.userId(), true, row.emailVerified() ? "OK" : "OK - email verification pending");
         jdbcTemplate.update("UPDATE users SET last_login_at = SYSDATETIME(), updated_at = SYSDATETIME() WHERE user_id = ?", row.userId());
 
         UserDto user = findById(row.userId());
@@ -162,6 +182,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest request) {
+        deleteExpiredUnverifiedAccounts();
         ensureAccountSecuritySchema();
         GoogleProfile profile = verifyGoogleCredential(request.credential());
         UserDto linkedUser = findByGoogleSubject(profile.googleSubject());
@@ -184,14 +205,14 @@ public class AuthService {
                 throw new ApiException(HttpStatus.CONFLICT, "This Google account is already linked to another account");
             }
             refreshGoogleProfile(existingUser.id(), profile);
-            jdbcTemplate.update("UPDATE users SET email_verified = 1, updated_at = SYSDATETIME() WHERE user_id = ?", existingUser.id());
+            markEmailVerified(existingUser.id());
             UserDto user = findById(existingUser.id());
             return new AuthResponse(createDevelopmentToken(user.id()), user);
         }
 
         jdbcTemplate.update("""
-                INSERT INTO users (full_name, email, password_hash, avatar_url, status, email_verified)
-                VALUES (?, ?, ?, ?, 'ACTIVE', 1)
+                INSERT INTO users (full_name, email, password_hash, avatar_url, status, email_verified, google_subject, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'ACTIVE', 1, ?, SYSDATETIME(), SYSDATETIME())
                 """,
                 profile.displayName(),
                 profile.email(),
@@ -206,6 +227,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse githubLogin(GithubLoginRequest request) {
+        deleteExpiredUnverifiedAccounts();
         GithubProfile profile = fetchGithubProfile(request.code(), request.redirectUri());
         UserDto existingUser = findByEmailAnyStatus(profile.email());
 
@@ -219,8 +241,8 @@ public class AuthService {
         }
 
         jdbcTemplate.update("""
-                INSERT INTO users (full_name, email, password_hash, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'ACTIVE')
+                INSERT INTO users (full_name, email, password_hash, avatar_url, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'ACTIVE', SYSDATETIME(), SYSDATETIME())
                 """,
                 profile.displayName(),
                 profile.email(),
@@ -261,7 +283,7 @@ public class AuthService {
         try {
             resendEmailService.sendPasswordResetEmail(user.email(), user.fullName(), resetUrl);
         } catch (ApiException exception) {
-            return new MessageResponse("Reset link was created, but email could not be sent: " + exception.getMessage());
+            throw exception;
         }
         return new MessageResponse("If that email exists, a password reset link has been sent.");
     }
@@ -299,6 +321,7 @@ public class AuthService {
         if (token == null || token.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Verification token is required");
         }
+        ensureEmailVerificationTokenSchema();
 
         Long userId = jdbcTemplate.query("""
                 SELECT user_id
@@ -312,14 +335,172 @@ public class AuthService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Verification link is invalid or expired");
         }
 
-        jdbcTemplate.update("UPDATE users SET email_verified = 1, updated_at = SYSDATETIME() WHERE user_id = ?", userId);
+        markEmailVerified(userId);
         jdbcTemplate.update("UPDATE email_verification_tokens SET used = 1 WHERE token = ?", token.trim());
-        return new MessageResponse("Email verified. You can sign in now.");
+        return new MessageResponse("Email verified. Your account is safe.");
+    }
+
+    public AccountSecurityDto getAccountSecurity(Long userId) {
+        ensureAccountSecuritySchema();
+        return jdbcTemplate.query("""
+                SELECT user_id, email, email_verified, email_verified_at, google_subject, created_at
+                FROM users
+                WHERE user_id = ? AND status = 'ACTIVE'
+                """, (rs, rowNum) -> {
+                    Long accountUserId = rs.getLong("user_id");
+                    LocalDateTime createdAt = toLocalDateTime(rs.getTimestamp("created_at"));
+                    String googleSubject = rs.getString("google_subject");
+                    boolean isAdmin = findRoles(accountUserId).contains("ADMIN");
+                    return new AccountSecurityDto(
+                            accountUserId,
+                            rs.getString("email"),
+                            rs.getBoolean("email_verified"),
+                            toLocalDateTime(rs.getTimestamp("email_verified_at")),
+                            googleSubject != null && !googleSubject.isBlank(),
+                            createdAt,
+                            isAdmin || createdAt == null ? null : createdAt.plusDays(EMAIL_VERIFICATION_GRACE_DAYS)
+                    );
+                }, userId).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Active user not found"));
+    }
+
+    @Transactional
+    public MessageResponse sendAccountEmailVerification(AccountActionUserRequest request, String requestFrontendUrl) {
+        ensureAccountSecuritySchema();
+        AccountSecurityDto security = getAccountSecurity(request.userId());
+        if (security.emailVerified()) {
+            return new MessageResponse("Email is already verified.");
+        }
+
+        AccountRecipient recipient = findAccountRecipient(request.userId());
+        String token = createAccountActionToken(request.userId(), "VERIFY_EMAIL", null);
+        resendEmailService.sendEmailVerification(
+                recipient.email(),
+                recipient.fullName(),
+                accountActionUrl(token, requestFrontendUrl)
+        );
+        return new MessageResponse("Verification email has been sent.");
+    }
+
+    @Transactional
+    public MessageResponse requestEmailChange(ChangeEmailRequest request, String requestFrontendUrl) {
+        ensureAccountSecuritySchema();
+        AccountRecipient recipient = findAccountRecipient(request.userId());
+        String nextEmail = normalizeEmail(request.newEmail());
+        if (nextEmail.equalsIgnoreCase(recipient.email())) {
+            return new MessageResponse("This is already your current email.");
+        }
+        if (emailExistsForDifferentUser(nextEmail, request.userId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Email already exists");
+        }
+
+        String token = createAccountActionToken(request.userId(), "CHANGE_EMAIL", nextEmail);
+        resendEmailService.sendEmailChangeConfirmation(
+                nextEmail,
+                recipient.fullName(),
+                accountActionUrl(token, requestFrontendUrl)
+        );
+        return new MessageResponse("Confirmation email has been sent to the new address.");
+    }
+
+    @Transactional
+    public MessageResponse changePassword(ChangePasswordRequest request) {
+        AccountRecipient recipient = findAccountRecipient(request.userId());
+        if (recipient.passwordHash() == null
+                || !passwordMatches(recipient.email(), request.currentPassword(), recipient.passwordHash())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET password_hash = ?,
+                    password_changed_at = SYSDATETIME(),
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ? AND status = 'ACTIVE'
+                """, passwordEncoder.encode(request.newPassword()), request.userId());
+        return new MessageResponse("Password updated successfully.");
+    }
+
+    @Transactional
+    public AccountSecurityDto linkGoogleAccount(LinkGoogleAccountRequest request) {
+        ensureAccountSecuritySchema();
+        AccountRecipient recipient = findAccountRecipient(request.userId());
+        GoogleProfile profile = verifyGoogleCredential(request.credential());
+        UserDto emailOwner = findByEmailAnyStatus(profile.email());
+        if (emailOwner != null && !emailOwner.id().equals(request.userId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "This Google email is already used by another account");
+        }
+        if (googleSubjectOwnedByDifferentUser(profile.googleSubject(), request.userId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "This Google account is already linked to another account");
+        }
+
+        refreshGoogleProfile(recipient.userId(), profile);
+        return getAccountSecurity(request.userId());
+    }
+
+    @Transactional
+    public MessageResponse requestAccountDeletion(AccountActionUserRequest request, String requestFrontendUrl) {
+        ensureAccountSecuritySchema();
+        AccountRecipient recipient = findAccountRecipient(request.userId());
+        String token = createAccountActionToken(request.userId(), "DELETE_ACCOUNT", null);
+        resendEmailService.sendAccountDeletionConfirmation(
+                recipient.email(),
+                recipient.fullName(),
+                accountActionUrl(token, requestFrontendUrl)
+        );
+        return new MessageResponse("Account deletion confirmation has been sent to your email.");
+    }
+
+    @Transactional
+    public AccountActionResultDto confirmAccountAction(String token) {
+        ensureAccountSecuritySchema();
+        if (token == null || token.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Confirmation token is required");
+        }
+
+        AccountActionToken action = findValidAccountActionToken(token.trim());
+        if (action == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Confirmation link is invalid or expired");
+        }
+
+        if ("VERIFY_EMAIL".equals(action.actionType())) {
+            markEmailVerified(action.userId());
+            markAccountActionTokenUsed(token.trim());
+            return new AccountActionResultDto("VERIFY_EMAIL", "Email verified successfully.");
+        }
+
+        if ("CHANGE_EMAIL".equals(action.actionType())) {
+            String nextEmail = normalizeEmail(action.newEmail());
+            if (nextEmail.isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "New email is missing from this confirmation link");
+            }
+            if (emailExistsForDifferentUser(nextEmail, action.userId())) {
+                throw new ApiException(HttpStatus.CONFLICT, "Email already exists");
+            }
+            jdbcTemplate.update("""
+                    UPDATE users
+                    SET email = ?,
+                        email_verified = 1,
+                        email_verified_at = SYSDATETIME(),
+                        updated_at = SYSDATETIME()
+                    WHERE user_id = ? AND status = 'ACTIVE'
+                    """, nextEmail, action.userId());
+            markAccountActionTokenUsed(token.trim());
+            return new AccountActionResultDto("CHANGE_EMAIL", "Email changed and verified successfully.");
+        }
+
+        if ("DELETE_ACCOUNT".equals(action.actionType())) {
+            markAccountActionTokenUsed(token.trim());
+            deleteOwnAccount(action.userId());
+            return new AccountActionResultDto("DELETE_ACCOUNT", "Account deleted successfully.");
+        }
+
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported account action");
     }
 
     public UserDto findById(Long id) {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE user_id = ? AND status <> 'DELETED'
                 """, userMapper, id).stream().findFirst()
@@ -328,7 +509,7 @@ public class AuthService {
 
     public List<UserDto> listUsers() {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE status <> 'DELETED'
                 ORDER BY created_at DESC
@@ -387,7 +568,7 @@ public class AuthService {
 
     private UserDto findByEmail(String email) {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE email = ? AND status <> 'DELETED'
                 """, userMapper, email).stream().findFirst()
@@ -396,7 +577,7 @@ public class AuthService {
 
     private UserDto findByEmailOrNull(String email) {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE email = ? AND status = 'ACTIVE'
                 """, userMapper, email).stream().findFirst().orElse(null);
@@ -404,7 +585,7 @@ public class AuthService {
 
     private UserDto findByEmailAnyStatus(String email) {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE email = ? AND status <> 'DELETED'
                 """, userMapper, email).stream().findFirst().orElse(null);
@@ -412,7 +593,7 @@ public class AuthService {
 
     private UserDto findByGoogleSubject(String googleSubject) {
         return jdbcTemplate.query("""
-                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at
+                SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
                 FROM users
                 WHERE google_subject = ? AND status <> 'DELETED'
                 """, userMapper, googleSubject).stream().findFirst().orElse(null);
@@ -469,14 +650,22 @@ public class AuthService {
     }
 
     private void createEmailVerificationToken(Long userId, String email, String fullName, String requestFrontendUrl) {
+        ensureEmailVerificationTokenSchema();
         // Invalidate previous unused tokens
         jdbcTemplate.update("UPDATE email_verification_tokens SET used = 1 WHERE user_id = ? AND used = 0", userId);
 
         String token = UUID.randomUUID().toString() + UUID.randomUUID();
-        jdbcTemplate.update("""
-                INSERT INTO email_verification_tokens (user_id, token, expires_at, used)
-                VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
-                """, userId, token);
+        if (columnExists("email_verification_tokens", "expired_at")) {
+            jdbcTemplate.update("""
+                    INSERT INTO email_verification_tokens (user_id, token, expires_at, expired_at, used)
+                    VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                    """, userId, token);
+        } else {
+            jdbcTemplate.update("""
+                    INSERT INTO email_verification_tokens (user_id, token, expires_at, used)
+                    VALUES (?, ?, DATEADD(MINUTE, 30, SYSDATETIME()), 0)
+                    """, userId, token);
+        }
 
         String base = requestFrontendUrl == null || requestFrontendUrl.isBlank() ? frontendUrl : requestFrontendUrl;
         String verifyUrl = base + "/verify-email?token=" + token;
@@ -803,6 +992,26 @@ public class AuthService {
         markEmailVerifiedIfSupported(userId, profile.emailVerified());
     }
 
+    private void markEmailVerified(Long userId) {
+        if (columnExists("users", "email_verified_at")) {
+            jdbcTemplate.update("""
+                    UPDATE users
+                    SET email_verified = 1,
+                        email_verified_at = COALESCE(email_verified_at, SYSDATETIME()),
+                        updated_at = SYSDATETIME()
+                    WHERE user_id = ?
+                    """, userId);
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE users
+                SET email_verified = 1,
+                    updated_at = SYSDATETIME()
+                WHERE user_id = ?
+                """, userId);
+    }
+
     private void markEmailVerifiedIfSupported(Long userId, boolean verified) {
         if (!verified
                 || !columnExists("users", "email_verified")
@@ -810,13 +1019,7 @@ public class AuthService {
             return;
         }
 
-        jdbcTemplate.update("""
-                UPDATE users
-                SET email_verified = 1,
-                    email_verified_at = COALESCE(email_verified_at, SYSDATETIME()),
-                    updated_at = SYSDATETIME()
-                WHERE user_id = ?
-                """, userId);
+        markEmailVerified(userId);
     }
 
     private AccountRecipient findAccountRecipient(Long userId) {
@@ -898,6 +1101,34 @@ public class AuthService {
         jdbcTemplate.update("DELETE FROM user_settings WHERE user_id = ?", userId);
     }
 
+    private void deleteExpiredUnverifiedAccounts() {
+        if (!tableExists("users") || !columnExists("users", "email_verified")) {
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE u
+                SET full_name = CONCAT('Expired User #', u.user_id),
+                    email = CONCAT('expired-unverified-', u.user_id, '-', CONVERT(varchar(36), NEWID()), '@deleted.local'),
+                    password_hash = CONVERT(varchar(72), NEWID()),
+                    avatar_url = NULL,
+                    status = 'DELETED',
+                    updated_at = SYSDATETIME()
+                FROM users u
+                WHERE u.status = 'ACTIVE'
+                  AND u.email_verified = 0
+                  AND u.created_at IS NOT NULL
+                  AND u.created_at < DATEADD(DAY, ?, SYSDATETIME())
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM user_roles ur
+                        INNER JOIN roles r ON r.role_id = ur.role_id
+                        WHERE ur.user_id = u.user_id
+                          AND r.role_name = 'ADMIN'
+                  )
+                """, -EMAIL_VERIFICATION_GRACE_DAYS);
+    }
+
     private boolean googleSubjectOwnedByDifferentUser(String googleSubject, Long userId) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -928,6 +1159,66 @@ public class AuthService {
         }
     }
 
+    private void ensureEmailVerificationTokenSchema() {
+        if (!tableExists("email_verification_tokens")) {
+            jdbcTemplate.execute("""
+                    CREATE TABLE [dbo].[email_verification_tokens](
+                        [token_id] [bigint] IDENTITY(1,1) NOT NULL,
+                        [user_id] [bigint] NOT NULL,
+                        [token] [varchar](255) NOT NULL,
+                        [expires_at] [datetime2](7) NOT NULL,
+                        [used] [bit] NOT NULL CONSTRAINT [DF_email_verification_tokens_used] DEFAULT ((0)),
+                        [created_at] [datetime2](7) NOT NULL CONSTRAINT [DF_email_verification_tokens_created_at] DEFAULT (sysdatetime()),
+                        CONSTRAINT [PK_email_verification_tokens] PRIMARY KEY CLUSTERED ([token_id] ASC),
+                        CONSTRAINT [UX_email_verification_tokens_token] UNIQUE NONCLUSTERED ([token] ASC),
+                        CONSTRAINT [FK_email_verification_tokens_user] FOREIGN KEY([user_id])
+                            REFERENCES [dbo].[users] ([user_id])
+                    )
+                    """);
+        }
+
+        if (!columnExists("email_verification_tokens", "expires_at")) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ADD [expires_at] [datetime2](7) NULL
+                    """);
+
+            if (columnExists("email_verification_tokens", "expired_at")) {
+                jdbcTemplate.execute("""
+                        UPDATE [dbo].[email_verification_tokens]
+                        SET [expires_at] = [expired_at]
+                        WHERE [expires_at] IS NULL
+                        """);
+            }
+
+            jdbcTemplate.execute("""
+                    UPDATE [dbo].[email_verification_tokens]
+                    SET [expires_at] = DATEADD(MINUTE, 30, SYSDATETIME())
+                    WHERE [expires_at] IS NULL
+                    """);
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ALTER COLUMN [expires_at] [datetime2](7) NOT NULL
+                    """);
+        }
+
+        if (columnExists("email_verification_tokens", "expired_at")
+                && !defaultConstraintExists("email_verification_tokens", "expired_at")) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[email_verification_tokens]
+                    ADD CONSTRAINT [DF_email_verification_tokens_expired_at]
+                    DEFAULT (DATEADD(MINUTE, 30, SYSDATETIME())) FOR [expired_at]
+                    """);
+        }
+
+        if (!indexExists("email_verification_tokens", "IX_email_verification_tokens_user_expires")) {
+            jdbcTemplate.execute("""
+                    CREATE NONCLUSTERED INDEX [IX_email_verification_tokens_user_expires]
+                    ON [dbo].[email_verification_tokens]([user_id], [used], [expires_at])
+                    """);
+        }
+    }
+
     private boolean tableExists(String tableName) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -938,11 +1229,33 @@ public class AuthService {
         return count != null && count > 0;
     }
 
+    private boolean indexExists(String tableName, String indexName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.indexes
+                WHERE [object_id] = OBJECT_ID(?) AND [name] = ?
+                """, Integer.class, "dbo." + tableName, indexName);
+        return count != null && count > 0;
+    }
+
     private boolean columnExists(String tableName, String columnName) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM sys.columns c
                 WHERE c.object_id = OBJECT_ID(?) AND c.name = ?
+                """, Integer.class, "dbo." + tableName, columnName);
+        return count != null && count > 0;
+    }
+
+    private boolean defaultConstraintExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys.default_constraints dc
+                INNER JOIN sys.columns c
+                    ON c.object_id = dc.parent_object_id
+                   AND c.column_id = dc.parent_column_id
+                WHERE dc.parent_object_id = OBJECT_ID(?)
+                  AND c.name = ?
                 """, Integer.class, "dbo." + tableName, columnName);
         return count != null && count > 0;
     }

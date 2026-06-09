@@ -50,8 +50,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        return authService.register(request, resolveFrontendUrl(httpRequest));
     }
 
     @PostMapping("/login")
@@ -92,6 +92,55 @@ public class AuthController {
     @PatchMapping("/users/{id}")
     public UserDto updateProfile(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
         return authService.updateProfile(id, request);
+    }
+
+    @PatchMapping("/users/{id}/profile")
+    public UserDto updateProfileAlias(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
+        return authService.updateProfile(id, request);
+    }
+
+    @GetMapping("/account/security")
+    public AccountSecurityDto accountSecurity(@RequestParam Long userId) {
+        return authService.getAccountSecurity(userId);
+    }
+
+    @PostMapping("/account/send-email-verification")
+    public MessageResponse sendAccountEmailVerification(
+            @Valid @RequestBody AccountActionUserRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.sendAccountEmailVerification(request, resolveFrontendUrl(httpRequest));
+    }
+
+    @PostMapping("/account/change-email")
+    public MessageResponse requestEmailChange(
+            @Valid @RequestBody ChangeEmailRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.requestEmailChange(request, resolveFrontendUrl(httpRequest));
+    }
+
+    @PostMapping("/account/change-password")
+    public MessageResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        return authService.changePassword(request);
+    }
+
+    @PostMapping("/account/link-google")
+    public AccountSecurityDto linkGoogleAccount(@Valid @RequestBody LinkGoogleAccountRequest request) {
+        return authService.linkGoogleAccount(request);
+    }
+
+    @PostMapping("/account/delete-request")
+    public MessageResponse requestAccountDeletion(
+            @Valid @RequestBody AccountActionUserRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.requestAccountDeletion(request, resolveFrontendUrl(httpRequest));
+    }
+
+    @GetMapping("/account/confirm")
+    public AccountActionResultDto confirmAccountAction(@RequestParam String token) {
+        return authService.confirmAccountAction(token);
     }
 
     @PostMapping("/users/{id}/avatar")

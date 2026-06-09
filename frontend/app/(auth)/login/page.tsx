@@ -9,8 +9,7 @@ import { LogoLoader } from "@/components/layout/logo-loader"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
-import { isValidPassword, passwordPolicyMessage } from "@/lib/validation"
-import { isValidEmail } from "@/lib/validation"
+import { isStrongPassword, isValidEmail } from "@/lib/validation"
 
 type GoogleCredentialResponse = {
   credential?: string
@@ -56,6 +55,7 @@ export default function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isForgotPassword, setIsForgotPassword] = useState(false)
   const [emailTouched, setEmailTouched] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
   const [isGoogleReady, setIsGoogleReady] = useState(false)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const router = useRouter()
@@ -64,6 +64,7 @@ export default function AuthPage() {
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
   const githubClientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
   const emailIsInvalid = emailTouched && email.trim().length > 0 && !isValidEmail(email)
+  const passwordIsWeak = !isLogin && !isForgotPassword && passwordTouched && !isStrongPassword(password)
 
   const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
     if (!response.credential) {
@@ -160,6 +161,7 @@ export default function AuthPage() {
     setError("")
     setMessage("")
     setEmailTouched(true)
+    setPasswordTouched(true)
 
     if (isForgotPassword) {
       if (!email.trim()) {
@@ -199,8 +201,8 @@ export default function AuthPage() {
       setError(t("invalidEmailFormat"))
       return
     }
-    if (!isLogin && !isValidPassword(password)) {
-      setError(passwordPolicyMessage)
+    if (!isLogin && !isStrongPassword(password)) {
+      setError(t("passwordWeak"))
       return
     }
 
@@ -314,7 +316,7 @@ export default function AuthPage() {
             {[t("login"), t("register")].map((tab, i) => (
               <motion.button
                 key={tab}
-                onClick={() => { setIsLogin(i === 0); setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
+                onClick={() => { setIsLogin(i === 0); setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false); setPasswordTouched(false) }}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   (i === 0 ? isLogin : !isLogin)
                     ? "bg-primary text-primary-foreground"
@@ -329,7 +331,7 @@ export default function AuthPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {isForgotPassword && (
               <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-muted-foreground">
                 {t("forgotPasswordHelp")}
@@ -419,11 +421,22 @@ export default function AuthPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    if (error.toLowerCase().includes("password")) {
+                      setError("")
+                    }
+                  }}
+                  onBlur={() => setPasswordTouched(true)}
                   placeholder={t("enterPassword")}
-                  required
-                  minLength={isLogin ? 1 : 8}
-                  className="w-full pl-11 pr-12 py-3 rounded-xl bg-secondary/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+                  required={!isForgotPassword}
+                  minLength={isLogin ? undefined : 8}
+                  aria-invalid={passwordIsWeak}
+                  className={`w-full pl-11 pr-12 py-3 rounded-xl bg-secondary/50 border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
+                    passwordIsWeak
+                      ? "border-destructive/60 focus:border-destructive/60 focus:ring-destructive/20"
+                      : "border-border/50 focus:border-primary/50 focus:ring-primary/30"
+                  }`}
                 />
                 <button
                   type="button"
@@ -433,6 +446,19 @@ export default function AuthPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              {!isLogin && !isForgotPassword && (
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+                    passwordIsWeak
+                      ? "border-destructive/25 bg-destructive/10 text-destructive"
+                      : "border-border/50 bg-secondary/35 text-muted-foreground"
+                  }`}
+                >
+                  {passwordIsWeak ? t("passwordWeak") : t("passwordRequirement")}
+                </motion.p>
+              )}
             </motion.div>
 
             {/* Forgot Password */}
@@ -445,7 +471,7 @@ export default function AuthPage() {
               >
                 <button
                   type="button"
-                  onClick={() => { setIsForgotPassword(true); setError(""); setMessage(""); setEmailTouched(false) }}
+                  onClick={() => { setIsForgotPassword(true); setError(""); setMessage(""); setEmailTouched(false); setPasswordTouched(false) }}
                   className="text-sm text-primary hover:underline"
                 >
                   {t("forgotPassword")}
@@ -456,7 +482,7 @@ export default function AuthPage() {
             {isForgotPassword && (
               <button
                 type="button"
-                onClick={() => { setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false) }}
+                onClick={() => { setIsForgotPassword(false); setError(""); setMessage(""); setEmailTouched(false); setPasswordTouched(false) }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 {t("backToSignIn")}
