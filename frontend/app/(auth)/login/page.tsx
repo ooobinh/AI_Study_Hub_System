@@ -202,6 +202,7 @@ export default function AuthPage() {
       return
     }
     if (!isLogin && !isStrongPassword(password)) {
+      setError(t("passwordWeak"))
       return
     }
 

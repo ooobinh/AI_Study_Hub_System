@@ -319,9 +319,15 @@ function normalizeTaskLabel(status: string) {
   return status
 }
 
-async function uploadWorkspaceFile(file: File, ownerId: string, workspaceId: number): Promise<WorkspaceDocumentDto> {
+async function uploadWorkspaceFile(
+  file: File,
+  ownerId: string,
+  workspaceId: number,
+  subjectId: number,
+): Promise<WorkspaceDocumentDto> {
   const formData = new FormData()
   formData.append("ownerId", ownerId)
+  formData.append("subjectId", String(subjectId))
   formData.append("workspaceId", String(workspaceId))
   formData.append("file", file)
 
@@ -360,6 +366,7 @@ export default function WorkspacesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadLabel, setUploadLabel] = useState("")
+  const [uploadSubjectId, setUploadSubjectId] = useState("")
 
   const [workspaceName, setWorkspaceName] = useState("")
   const [workspaceDescription, setWorkspaceDescription] = useState("")
@@ -395,7 +402,11 @@ export default function WorkspacesPage() {
     try {
       const response = await fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`)
       if (response.ok) {
-        setSubjects(await response.json() as SubjectDto[])
+        const subjectList = await response.json() as SubjectDto[]
+        setSubjects(subjectList)
+        if (subjectList.length > 0) {
+          setUploadSubjectId((current) => current || String(subjectList[0].id))
+        }
       }
     } catch {
       setSubjects([])
@@ -617,13 +628,17 @@ export default function WorkspacesPage() {
       setError("Viewer role cannot upload documents")
       return
     }
+    if (!uploadSubjectId) {
+      setError("Select a subject before uploading.")
+      return
+    }
 
     setError("")
     for (const file of acceptedFiles) {
       try {
         setUploadProgress(20)
         setUploadLabel(`Uploading ${file.name}`)
-        await uploadWorkspaceFile(file, user.id, selectedWorkspaceId)
+        await uploadWorkspaceFile(file, user.id, selectedWorkspaceId, Number(uploadSubjectId))
         setUploadProgress(85)
       } catch (err) {
         setError(getNetworkErrorMessage(err))
@@ -640,7 +655,7 @@ export default function WorkspacesPage() {
       setUploadProgress(null)
       setUploadLabel("")
     }, 1200)
-  }, [canContribute, selectedWorkspaceId, user])
+  }, [canContribute, refreshSelected, selectedWorkspaceId, uploadSubjectId, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -1111,6 +1126,19 @@ export default function WorkspacesPage() {
                   )}
                   {activeTab === "documents" && (
                     <section className="space-y-4">
+                      <select
+                        value={uploadSubjectId}
+                        onChange={(event) => setUploadSubjectId(event.target.value)}
+                        className="h-10 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground outline-none focus:border-primary/60"
+                        aria-label="Subject for upload"
+                      >
+                        <option value="">Select subject for upload</option>
+                        {subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>
+                            {subject.name} ({subject.code})
+                          </option>
+                        ))}
+                      </select>
                       <div
                         {...getRootProps()}
                         className={`relative cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all ${

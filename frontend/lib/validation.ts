@@ -9,3 +9,10 @@ export function isStrongPassword(value: string) {
 }
 
 export const emailFormatMessage = "Please enter a valid email address, for example name@example.com."
+
+export function isValidPassword(value: string) {
+  return isStrongPassword(value)
+}
+
+export const passwordPolicyMessage =
+  "Password must be at least 8 characters and include at least one letter and one number."
