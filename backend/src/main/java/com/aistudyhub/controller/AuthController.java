@@ -19,6 +19,7 @@ import com.aistudyhub.dto.auth.SessionStatusDto;
 import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.aistudyhub.service.AuthService;
+import com.aistudyhub.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -102,18 +103,26 @@ public class AuthController {
     }
 
     @GetMapping("/users/{id}")
-    public UserDto user(@PathVariable Long id) {
-        return authService.findById(id);
+    public UserDto user(@PathVariable Long id, HttpServletRequest request) {
+        return authService.findById(requireAuthenticatedUserId(request), id);
     }
 
     @PatchMapping("/users/{id}")
-    public UserDto updateProfile(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
-        return authService.updateProfile(id, request);
+    public UserDto updateProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProfileRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.updateProfile(requireAuthenticatedUserId(httpRequest), id, request);
     }
 
     @PatchMapping("/users/{id}/profile")
-    public UserDto updateProfileAlias(@PathVariable Long id, @Valid @RequestBody UpdateProfileRequest request) {
-        return authService.updateProfile(id, request);
+    public UserDto updateProfileAlias(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProfileRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        return authService.updateProfile(requireAuthenticatedUserId(httpRequest), id, request);
     }
 
     @GetMapping("/account/security")
@@ -166,6 +175,11 @@ public class AuthController {
             @RequestParam MultipartFile file,
             HttpServletRequest request
     ) {
+        Long requesterId = requireAuthenticatedUserId(request);
+        if (!requesterId.equals(id)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You can only access your own profile.");
+        }
+
         if (file.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Avatar file is empty");
         }
@@ -198,12 +212,20 @@ public class AuthController {
 
         String baseUrl = request.getRequestURL().toString().replace(request.getRequestURI(), "");
         String avatarUrl = baseUrl + "/uploads/avatars/" + id + "/" + storedName;
-        return authService.updateAvatar(id, avatarUrl);
+        return authService.updateAvatar(requesterId, id, avatarUrl);
     }
 
     @DeleteMapping("/users/{id}/avatar")
-    public UserDto deleteAvatar(@PathVariable Long id) {
-        return authService.removeAvatar(id);
+    public UserDto deleteAvatar(@PathVariable Long id, HttpServletRequest request) {
+        return authService.removeAvatar(requireAuthenticatedUserId(request), id);
+    }
+
+    private Long requireAuthenticatedUserId(HttpServletRequest request) {
+        Object value = request.getAttribute(SessionService.REQUEST_USER_ID);
+        if (value instanceof Long userId) {
+            return userId;
+        }
+        throw new ApiException(HttpStatus.UNAUTHORIZED, "Session required. Please sign in again.");
     }
 
     private String resolveFrontendUrl(HttpServletRequest request) {

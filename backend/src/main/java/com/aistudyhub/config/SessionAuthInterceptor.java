@@ -10,9 +10,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class SessionAuthInterceptor implements HandlerInterceptor {
+    private static final Pattern AUTH_USER_PATH = Pattern.compile("^/api/auth/users/(\\d+)(?:/.*)?$");
+
     private final SessionService sessionService;
     private final ObjectMapper objectMapper;
 
@@ -45,10 +49,25 @@ public class SessionAuthInterceptor implements HandlerInterceptor {
         }
 
         request.setAttribute(SessionService.REQUEST_USER_ID, session.userId());
-        if (!userIdParamsMatch(request, session.userId())) {
-            return unauthorized(response, "You can only access your own account data.");
+        if (!userIdParamsMatch(request, session.userId()) || !pathUserIdMatches(path, session.userId())) {
+            return forbidden(response, "You can only access your own account data.");
         }
         return true;
+    }
+
+    private boolean pathUserIdMatches(String path, Long authenticatedUserId) {
+        if (path == null || authenticatedUserId == null) {
+            return true;
+        }
+        Matcher matcher = AUTH_USER_PATH.matcher(path);
+        if (!matcher.matches()) {
+            return true;
+        }
+        try {
+            return Long.parseLong(matcher.group(1)) == authenticatedUserId;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     private boolean userIdParamsMatch(HttpServletRequest request, Long authenticatedUserId) {
@@ -88,7 +107,15 @@ public class SessionAuthInterceptor implements HandlerInterceptor {
     }
 
     private boolean unauthorized(HttpServletResponse response, String message) throws Exception {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        return writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, message);
+    }
+
+    private boolean forbidden(HttpServletResponse response, String message) throws Exception {
+        return writeJsonError(response, HttpServletResponse.SC_FORBIDDEN, message);
+    }
+
+    private boolean writeJsonError(HttpServletResponse response, int status, String message) throws Exception {
+        response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), Map.of("message", message));
         return false;

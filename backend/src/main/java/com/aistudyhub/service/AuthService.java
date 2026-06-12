@@ -142,8 +142,9 @@ public class AuthService {
         return authResponseWithSession(findById(user.id()), httpRequest);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ApiException.class)
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+        ensureLoginSecuritySchema();
         deleteExpiredUnverifiedAccounts();
         String email = request.email() == null ? "" : request.email().trim().toLowerCase();
         LoginUserRow row = jdbcTemplate.query("""
@@ -162,23 +163,28 @@ public class AuthService {
                 : null, email);
 
         if (row == null || !"ACTIVE".equalsIgnoreCase(row.status())) {
-            recordLoginAttempt(email, row == null ? null : row.userId(), false, "Invalid email or password");
+            recordLoginAttempt(httpRequest, email, row == null ? null : row.userId(), false, "Invalid email or password");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         if (row.lockedUntil() != null && row.lockedUntil().isAfter(LocalDateTime.now())) {
-            recordLoginAttempt(email, row.userId(), false, "Account locked");
-            throw new ApiException(HttpStatus.FORBIDDEN, "Account is locked. Try again later.");
+            recordLoginAttempt(httpRequest, email, row.userId(), false, "Account locked");
+            long minutesLeft = Math.max(1, Duration.between(LocalDateTime.now(), row.lockedUntil()).toMinutes());
+            throw new ApiException(HttpStatus.FORBIDDEN,
+                    "Account is locked. Try again in " + minutesLeft + " minute(s).");
         }
 
         if (row.passwordHash() == null || !passwordMatches(email, request.password(), row.passwordHash())) {
-            registerFailedLogin(row.userId(), email);
-            recordLoginAttempt(email, row.userId(), false, "Invalid email or password");
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            boolean justLocked = registerFailedLogin(row.userId(), email, httpRequest);
+            if (!justLocked) {
+                recordLoginAttempt(httpRequest, email, row.userId(), false, "Invalid email or password");
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            }
+            throw new ApiException(HttpStatus.FORBIDDEN, "Account is locked. Try again in 15 minute(s).");
         }
 
         clearFailedLogin(row.userId());
-        recordLoginAttempt(email, row.userId(), true, row.emailVerified() ? "OK" : "OK - email verification pending");
+        recordLoginAttempt(httpRequest, email, row.userId(), true, row.emailVerified() ? "OK" : "OK - email verification pending");
         jdbcTemplate.update("UPDATE users SET last_login_at = SYSDATETIME(), updated_at = SYSDATETIME() WHERE user_id = ?", row.userId());
 
         UserDto user = findById(row.userId());
@@ -530,6 +536,11 @@ public class AuthService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
     }
 
+    public UserDto findById(Long requesterId, Long id) {
+        ensureSelfAccess(requesterId, id);
+        return findById(id);
+    }
+
     public List<UserDto> listUsers() {
         return jdbcTemplate.query("""
                 SELECT user_id, full_name, email, avatar_url, university, major, status, created_at, email_verified
@@ -539,7 +550,8 @@ public class AuthService {
                 """, userMapper);
     }
 
-    public UserDto updateAvatar(Long id, String avatarUrl) {
+    public UserDto updateAvatar(Long requesterId, Long id, String avatarUrl) {
+        ensureSelfAccess(requesterId, id);
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET avatar_url = ?, updated_at = SYSDATETIME()
@@ -553,7 +565,8 @@ public class AuthService {
         return findById(id);
     }
 
-    public UserDto removeAvatar(Long id) {
+    public UserDto removeAvatar(Long requesterId, Long id) {
+        ensureSelfAccess(requesterId, id);
         int updated = jdbcTemplate.update("""
                 UPDATE users
                 SET avatar_url = NULL, updated_at = SYSDATETIME()
@@ -568,14 +581,15 @@ public class AuthService {
     }
 
     @Transactional
-    public UserDto updateProfile(Long id, UpdateProfileRequest request) {
+    public UserDto updateProfile(Long requesterId, Long id, UpdateProfileRequest request) {
         if (id == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "User id is required");
         }
+        ensureSelfAccess(requesterId, id);
         UserDto current = findById(id);
-        String nextFullName = sanitizeProfileText(request.fullName(), current.fullName());
-        String nextUniversity = sanitizeProfileText(request.university(), current.university());
-        String nextMajor = sanitizeProfileText(request.major(), current.major());
+        String nextFullName = sanitizeProfileText(request.fullName(), current.fullName(), 50);
+        String nextUniversity = sanitizeProfileText(request.university(), current.university(), 150);
+        String nextMajor = sanitizeProfileText(request.major(), current.major(), 150);
 
         int updated = jdbcTemplate.update("""
                 UPDATE users
@@ -700,7 +714,7 @@ public class AuthService {
         }
     }
 
-    private void registerFailedLogin(Long userId, String email) {
+    private boolean registerFailedLogin(Long userId, String email, HttpServletRequest httpRequest) {
         jdbcTemplate.update("""
                 UPDATE users
                 SET failed_login_count = failed_login_count + 1,
@@ -717,7 +731,11 @@ public class AuthService {
                         updated_at = SYSDATETIME()
                     WHERE user_id = ?
                     """, userId);
+            recordLoginAttempt(httpRequest, email, userId, false,
+                    "Account locked for 15 minutes after 5 failed attempts");
+            return true;
         }
+        return false;
     }
 
     private void clearFailedLogin(Long userId) {
@@ -730,14 +748,72 @@ public class AuthService {
                 """, userId);
     }
 
-    private void recordLoginAttempt(String email, Long userId, boolean success, String message) {
+    private void recordLoginAttempt(HttpServletRequest httpRequest, String email, Long userId, boolean success, String message) {
+        if (!tableExists("auth_login_logs")) {
+            return;
+        }
         jdbcTemplate.update("""
                 INSERT INTO auth_login_logs (email, user_id, success, ip_address, user_agent, message)
-                VALUES (?, ?, ?, NULL, NULL, ?)
-                """, email, userId, success ? 1 : 0, message == null ? "" : message);
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                email,
+                userId,
+                success ? 1 : 0,
+                SessionService.clientIp(httpRequest),
+                SessionService.clientUserAgent(httpRequest),
+                message == null ? "" : message
+        );
     }
 
-    private String sanitizeProfileText(String value, String fallback) {
+    private void ensureSelfAccess(Long requesterId, Long targetUserId) {
+        if (requesterId == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Session required. Please sign in again.");
+        }
+        if (targetUserId == null || !requesterId.equals(targetUserId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You can only access your own profile.");
+        }
+    }
+
+    private void ensureLoginSecuritySchema() {
+        if (!columnExists("users", "failed_login_count")) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE [dbo].[users]
+                    ADD [failed_login_count] [int] NOT NULL
+                        CONSTRAINT [DF_users_failed_login_count] DEFAULT (0)
+                    """);
+        }
+        if (!columnExists("users", "locked_until")) {
+            jdbcTemplate.execute("ALTER TABLE [dbo].[users] ADD [locked_until] [datetime2](7) NULL");
+        }
+        if (!columnExists("users", "last_login_at")) {
+            jdbcTemplate.execute("ALTER TABLE [dbo].[users] ADD [last_login_at] [datetime2](7) NULL");
+        }
+        if (!tableExists("auth_login_logs")) {
+            jdbcTemplate.execute("""
+                    CREATE TABLE [dbo].[auth_login_logs](
+                        [log_id] [bigint] IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [email] [varchar](150) NULL,
+                        [user_id] [bigint] NULL,
+                        [success] [bit] NOT NULL,
+                        [ip_address] [varchar](64) NULL,
+                        [user_agent] [varchar](300) NULL,
+                        [message] [varchar](300) NULL,
+                        [created_at] [datetime2](7) NOT NULL
+                            CONSTRAINT [DF_auth_login_logs_created_at] DEFAULT (SYSDATETIME())
+                    )
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX [ix_auth_login_logs_email]
+                    ON [dbo].[auth_login_logs]([email] ASC)
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE INDEX [ix_auth_login_logs_user]
+                    ON [dbo].[auth_login_logs]([user_id] ASC)
+                    """);
+        }
+    }
+
+    private String sanitizeProfileText(String value, String fallback, int maxLength) {
         if (value == null) {
             return fallback;
         }
@@ -745,9 +821,8 @@ public class AuthService {
         if (trimmed.isBlank()) {
             return "";
         }
-        // Allow letters, numbers, spaces and common punctuation.
         String cleaned = trimmed.replaceAll("[^\\p{L}\\p{N} .,_@\\-()]", "");
-        return cleaned.length() > 150 ? cleaned.substring(0, 150) : cleaned;
+        return cleaned.length() > maxLength ? cleaned.substring(0, maxLength) : cleaned;
     }
 
     private record LoginUserRow(
