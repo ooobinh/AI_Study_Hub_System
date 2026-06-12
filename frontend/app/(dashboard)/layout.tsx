@@ -10,7 +10,7 @@ import { useLanguage } from "@/components/providers/language-provider"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TopNav } from "@/components/layout/top-nav"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl } from "@/lib/api"
+import { apiFetch, getApiUrl } from "@/lib/api"
 
 function getHoursLeft(deadline?: string | null) {
   if (!deadline) {
@@ -47,7 +47,7 @@ export default function DashboardLayout({
     }
 
     const sendHeartbeat = () => {
-      fetch(`${getApiUrl()}/api/forum/presence?userId=${user.id}`, { method: "POST" }).catch(() => undefined)
+      apiFetch(`${getApiUrl()}/api/forum/presence?userId=${user.id}`, { method: "POST" }).catch(() => undefined)
     }
 
     sendHeartbeat()

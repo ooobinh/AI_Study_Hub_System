@@ -10,7 +10,7 @@ import { LanguageSwitcher } from "@/components/layout/language-switcher"
 import { LogoLoader } from "@/components/layout/logo-loader"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,7 +83,7 @@ export function TopNav() {
     setIsLoadingNotifications(true)
     setNotificationError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/notifications?userId=${user.id}`)
+      const response = await apiFetch(`${getApiUrl()}/api/notifications?userId=${user.id}`)
       if (!response.ok) {
         const body = await response.json().catch(() => null)
         throw new Error(body?.message || "Could not load notifications")
@@ -118,7 +118,7 @@ export function TopNav() {
     )
 
     try {
-      await fetch(`${getApiUrl()}/api/notifications/${notification.id}/read?userId=${user.id}`, {
+      await apiFetch(`${getApiUrl()}/api/notifications/${notification.id}/read?userId=${user.id}`, {
         method: "PATCH",
       })
     } catch (err) {
@@ -133,7 +133,7 @@ export function TopNav() {
 
     setNotifications((current) => current.map((item) => ({ ...item, read: true })))
     try {
-      await fetch(`${getApiUrl()}/api/notifications/read-all?userId=${user.id}`, {
+      await apiFetch(`${getApiUrl()}/api/notifications/read-all?userId=${user.id}`, {
         method: "PATCH",
       })
     } catch (err) {
@@ -158,7 +158,7 @@ export function TopNav() {
 
     setIsSendingFeedback(true)
     try {
-      const response = await fetch(`${getApiUrl()}/api/feedback`, {
+      const response = await apiFetch(`${getApiUrl()}/api/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

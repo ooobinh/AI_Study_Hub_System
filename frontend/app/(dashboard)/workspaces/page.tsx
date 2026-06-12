@@ -35,7 +35,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 type WorkspaceTab =
   | "overview"
@@ -331,7 +331,7 @@ async function uploadWorkspaceFile(
   formData.append("workspaceId", String(workspaceId))
   formData.append("file", file)
 
-  const response = await fetch(`${getApiUrl()}/api/uploads/documents`, {
+  const response = await apiFetch(`${getApiUrl()}/api/uploads/documents`, {
     method: "POST",
     body: formData,
   })
@@ -400,7 +400,7 @@ export default function WorkspacesPage() {
   const loadSubjects = useCallback(async () => {
     if (!user) return
     try {
-      const response = await fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`)
+      const response = await apiFetch(`${getApiUrl()}/api/subjects?userId=${user.id}`)
       if (response.ok) {
         const subjectList = await response.json() as SubjectDto[]
         setSubjects(subjectList)
@@ -418,7 +418,7 @@ export default function WorkspacesPage() {
     setIsLoading(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces?userId=${user.id}`)
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces?userId=${user.id}`)
       const body = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(body?.message || "Could not load workspaces")
@@ -443,7 +443,7 @@ export default function WorkspacesPage() {
     setIsDetailLoading(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${workspaceId}?userId=${user.id}`)
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${workspaceId}?userId=${user.id}`)
       const body = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(body?.message || "Could not load workspace")
@@ -482,7 +482,7 @@ export default function WorkspacesPage() {
     const acceptInvite = async () => {
       setError("")
       try {
-        const response = await fetch(`${getApiUrl()}/api/workspaces/invitations/${token}/accept?userId=${user.id}`, {
+        const response = await apiFetch(`${getApiUrl()}/api/workspaces/invitations/${token}/accept?userId=${user.id}`, {
           method: "POST",
         })
         const body = await response.json().catch(() => null)
@@ -554,7 +554,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces?ownerId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces?ownerId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -591,7 +591,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/join?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/join?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: inviteCode.trim() }),
@@ -674,7 +674,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/invitations?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/invitations?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: inviteEmail.trim() || null, role: inviteRole }),
@@ -694,7 +694,7 @@ export default function WorkspacesPage() {
 
   const updateMemberRole = async (memberId: number, role: string) => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/members/${memberId}/role?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/members/${memberId}/role?userId=${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
@@ -709,7 +709,7 @@ export default function WorkspacesPage() {
 
   const removeMember = async (memberId: number) => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/members/${memberId}?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/members/${memberId}?userId=${user.id}`, {
       method: "DELETE",
     })
     if (!response.ok) {
@@ -726,7 +726,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/tasks?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/tasks?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -752,7 +752,7 @@ export default function WorkspacesPage() {
 
   const updateTaskStatus = async (task: WorkspaceTaskDto, status: string) => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/tasks/${task.id}?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/tasks/${task.id}?userId=${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -771,7 +771,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -797,7 +797,7 @@ export default function WorkspacesPage() {
 
   const createComment = async (postId: number) => {
     if (!user || !selectedWorkspaceId || !commentByPost[postId]?.trim()) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts/${postId}/comments?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts/${postId}/comments?userId=${user.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: commentByPost[postId].trim() }),
@@ -813,7 +813,7 @@ export default function WorkspacesPage() {
 
   const setPinned = async (postId: number, pinned: boolean) => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts/${postId}/pin?userId=${user.id}&pinned=${pinned}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/posts/${postId}/pin?userId=${user.id}&pinned=${pinned}`, {
       method: "PATCH",
     })
     if (!response.ok) {
@@ -829,7 +829,7 @@ export default function WorkspacesPage() {
     setIsAiRunning(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/ai?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/ai?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -853,7 +853,7 @@ export default function WorkspacesPage() {
   const completeQuiz = async (quizId: number) => {
     if (!user || !selectedWorkspaceId) return
     const scoreValue = quizScores[quizId] || "0"
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/quizzes/${quizId}/attempts?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/quizzes/${quizId}/attempts?userId=${user.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ score: Number(scoreValue), answersJson: null }),
@@ -870,7 +870,7 @@ export default function WorkspacesPage() {
   const updateFlashcardProgress = async (set: WorkspaceFlashcardSetDto) => {
     if (!user || !selectedWorkspaceId) return
     const nextReviewed = Number(flashcardProgress[set.id] || set.reviewedCount || 0)
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/flashcards/${set.id}/progress?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/flashcards/${set.id}/progress?userId=${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewedCount: nextReviewed, totalCount: set.totalCount }),
@@ -888,7 +888,7 @@ export default function WorkspacesPage() {
     setIsSaving(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}?userId=${user.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -911,7 +911,7 @@ export default function WorkspacesPage() {
 
   const leaveWorkspace = async () => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/leave?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}/leave?userId=${user.id}`, {
       method: "POST",
     })
     if (!response.ok) {
@@ -926,7 +926,7 @@ export default function WorkspacesPage() {
 
   const deleteWorkspace = async () => {
     if (!user || !selectedWorkspaceId) return
-    const response = await fetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/workspaces/${selectedWorkspaceId}?userId=${user.id}`, {
       method: "DELETE",
     })
     if (!response.ok) {

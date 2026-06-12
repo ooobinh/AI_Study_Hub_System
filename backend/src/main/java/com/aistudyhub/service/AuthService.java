@@ -15,9 +15,11 @@ import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
 import com.aistudyhub.dto.auth.ResetPasswordRequest;
+import com.aistudyhub.dto.auth.SessionStatusDto;
 import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -48,6 +50,7 @@ public class AuthService {
     private static final int EMAIL_VERIFICATION_GRACE_DAYS = 1;
 
     private final JdbcTemplate jdbcTemplate;
+    private final SessionService sessionService;
     private final ResendEmailService resendEmailService;
     private final ObjectMapper objectMapper;
     private final String frontendUrl;
@@ -84,6 +87,7 @@ public class AuthService {
 
     public AuthService(
             JdbcTemplate jdbcTemplate,
+            SessionService sessionService,
             ResendEmailService resendEmailService,
             ObjectMapper objectMapper,
             @Value("${app.frontend.url}") String frontendUrl,
@@ -92,6 +96,7 @@ public class AuthService {
             @Value("${app.github.client-secret:}") String githubClientSecret
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.sessionService = sessionService;
         this.resendEmailService = resendEmailService;
         this.objectMapper = objectMapper;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
@@ -109,12 +114,12 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        return register(request, null);
+    public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
+        return register(request, null, httpRequest);
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request, String requestFrontendUrl) {
+    public AuthResponse register(RegisterRequest request, String requestFrontendUrl, HttpServletRequest httpRequest) {
         deleteExpiredUnverifiedAccounts();
         String email = normalizeEmail(request.email());
         if (emailExists(email)) {
@@ -134,11 +139,11 @@ public class AuthService {
         UserDto user = findByEmail(email);
         assignRole(user.id(), "USER");
         createEmailVerificationToken(user.id(), user.email(), user.fullName(), requestFrontendUrl);
-        return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
+        return authResponseWithSession(findById(user.id()), httpRequest);
     }
 
     @Transactional
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         deleteExpiredUnverifiedAccounts();
         String email = request.email() == null ? "" : request.email().trim().toLowerCase();
         LoginUserRow row = jdbcTemplate.query("""
@@ -177,11 +182,11 @@ public class AuthService {
         jdbcTemplate.update("UPDATE users SET last_login_at = SYSDATETIME(), updated_at = SYSDATETIME() WHERE user_id = ?", row.userId());
 
         UserDto user = findById(row.userId());
-        return new AuthResponse(createDevelopmentToken(user.id()), user);
+        return authResponseWithSession(user, httpRequest);
     }
 
     @Transactional
-    public AuthResponse googleLogin(GoogleLoginRequest request) {
+    public AuthResponse googleLogin(GoogleLoginRequest request, HttpServletRequest httpRequest) {
         deleteExpiredUnverifiedAccounts();
         ensureAccountSecuritySchema();
         GoogleProfile profile = verifyGoogleCredential(request.credential());
@@ -192,7 +197,7 @@ public class AuthService {
             }
             refreshGoogleProfile(linkedUser.id(), profile);
             UserDto user = findById(linkedUser.id());
-            return new AuthResponse(createDevelopmentToken(user.id()), user);
+            return authResponseWithSession(user, httpRequest);
         }
 
         UserDto existingUser = findByEmailAnyStatus(profile.email());
@@ -207,7 +212,7 @@ public class AuthService {
             refreshGoogleProfile(existingUser.id(), profile);
             markEmailVerified(existingUser.id());
             UserDto user = findById(existingUser.id());
-            return new AuthResponse(createDevelopmentToken(user.id()), user);
+            return authResponseWithSession(user, httpRequest);
         }
 
         jdbcTemplate.update("""
@@ -222,11 +227,11 @@ public class AuthService {
 
         UserDto user = findByEmail(profile.email());
         assignRole(user.id(), "USER");
-        return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
+        return authResponseWithSession(findById(user.id()), httpRequest);
     }
 
     @Transactional
-    public AuthResponse githubLogin(GithubLoginRequest request) {
+    public AuthResponse githubLogin(GithubLoginRequest request, HttpServletRequest httpRequest) {
         deleteExpiredUnverifiedAccounts();
         GithubProfile profile = fetchGithubProfile(request.code(), request.redirectUri());
         UserDto existingUser = findByEmailAnyStatus(profile.email());
@@ -237,7 +242,7 @@ public class AuthService {
             }
             refreshGithubProfile(existingUser.id(), profile);
             UserDto user = findById(existingUser.id());
-            return new AuthResponse(createDevelopmentToken(user.id()), user);
+            return authResponseWithSession(user, httpRequest);
         }
 
         jdbcTemplate.update("""
@@ -252,7 +257,24 @@ public class AuthService {
         UserDto user = findByEmail(profile.email());
         assignRole(user.id(), "USER");
         markEmailVerifiedIfSupported(user.id(), profile.emailVerified());
-        return new AuthResponse(createDevelopmentToken(user.id()), findById(user.id()));
+        return authResponseWithSession(findById(user.id()), httpRequest);
+    }
+
+    public SessionStatusDto getSessionStatus(String authorizationHeader) {
+        String sessionId = SessionService.extractBearerToken(authorizationHeader);
+        if (sessionId == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Session required. Please sign in again.");
+        }
+        return sessionService.getSessionStatus(sessionId);
+    }
+
+    public SessionStatusDto heartbeatSession(String authorizationHeader) {
+        return getSessionStatus(authorizationHeader);
+    }
+
+    public MessageResponse logout(String authorizationHeader) {
+        sessionService.revokeFromAuthorizationHeader(authorizationHeader, "logout");
+        return new MessageResponse("Logged out.");
     }
 
     @Transactional
@@ -418,6 +440,7 @@ public class AuthService {
                     updated_at = SYSDATETIME()
                 WHERE user_id = ? AND status = 'ACTIVE'
                 """, passwordEncoder.encode(request.newPassword()), request.userId());
+        sessionService.revokeAllSessions(request.userId(), "password_changed");
         return new MessageResponse("Password updated successfully.");
     }
 
@@ -645,8 +668,9 @@ public class AuthService {
         return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
-    private String createDevelopmentToken(Long userId) {
-        return "dev-token-" + userId;
+    private AuthResponse authResponseWithSession(UserDto user, HttpServletRequest httpRequest) {
+        String token = sessionService.createSession(user.id(), httpRequest);
+        return new AuthResponse(token, user);
     }
 
     private void createEmailVerificationToken(Long userId, String email, String fullName, String requestFrontendUrl) {

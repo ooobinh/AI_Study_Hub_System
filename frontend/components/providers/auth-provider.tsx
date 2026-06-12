@@ -1,7 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import { getApiUrl } from '@/lib/api'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { apiFetch, getApiUrl, SESSION_TOKEN_KEY, setSessionExpiredHandler } from '@/lib/api'
 
 export type UserRole = 'user' | 'admin'
 
@@ -48,6 +48,10 @@ interface AuthResponse {
   user: BackendUser
 }
 
+interface SessionStatusDto {
+  idleMinutes: number
+}
+
 function mapUser(user: BackendUser): User {
   const roles = user.roles || []
   return {
@@ -82,63 +86,125 @@ async function requestAuth(path: string, body: Record<string, string>) {
   return response.json() as Promise<AuthResponse>
 }
 
+function persistSession(data: AuthResponse, setUser: (user: User) => void) {
+  const newUser = mapUser(data.user)
+  setUser(newUser)
+  localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
+  localStorage.setItem(SESSION_TOKEN_KEY, data.token)
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const idleLimitMsRef = useRef(60 * 60 * 1000)
+  const lastActivityRef = useRef(Date.now())
 
-  // Check if user is already logged in from localStorage
+  const logout = useCallback(() => {
+    void apiFetch(`${getApiUrl()}/api/auth/logout`, { method: 'POST' }).catch(() => undefined)
+    setUser(null)
+    localStorage.removeItem('aiStudyHubUser')
+    localStorage.removeItem(SESSION_TOKEN_KEY)
+  }, [])
+
   useEffect(() => {
-    const storedUser = localStorage.getItem('aiStudyHubUser')
-    const storedToken = localStorage.getItem('aiStudyHubToken')
-    if (storedUser && storedToken) {
+    setSessionExpiredHandler(logout)
+    return () => setSessionExpiredHandler(null)
+  }, [logout])
+
+  useEffect(() => {
+    async function bootstrapSession() {
+      const storedUser = localStorage.getItem('aiStudyHubUser')
+      const storedToken = localStorage.getItem(SESSION_TOKEN_KEY)
+
+      if (!storedUser || !storedToken) {
+        localStorage.removeItem('aiStudyHubUser')
+        localStorage.removeItem(SESSION_TOKEN_KEY)
+        setIsLoading(false)
+        return
+      }
+
       try {
         setUser(JSON.parse(storedUser))
-      } catch (error) {
-        console.log('[v0] Failed to parse stored user')
+        const response = await apiFetch(`${getApiUrl()}/api/auth/session`)
+        if (!response.ok) {
+          throw new Error('Session invalid')
+        }
+        const session = await response.json() as SessionStatusDto
+        idleLimitMsRef.current = (session.idleMinutes ?? 60) * 60 * 1000
+        lastActivityRef.current = Date.now()
+      } catch {
         localStorage.removeItem('aiStudyHubUser')
-        localStorage.removeItem('aiStudyHubToken')
+        localStorage.removeItem(SESSION_TOKEN_KEY)
+        setUser(null)
+      } finally {
+        setIsLoading(false)
       }
-    } else {
-      localStorage.removeItem('aiStudyHubUser')
-      localStorage.removeItem('aiStudyHubToken')
     }
-    setIsLoading(false)
+
+    void bootstrapSession()
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+
+    const markActive = () => {
+      lastActivityRef.current = Date.now()
+    }
+
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach((eventName) => window.addEventListener(eventName, markActive))
+
+    const idleInterval = window.setInterval(() => {
+      if (Date.now() - lastActivityRef.current > idleLimitMsRef.current) {
+        logout()
+      }
+    }, 30_000)
+
+    const heartbeatInterval = window.setInterval(() => {
+      void apiFetch(`${getApiUrl()}/api/auth/session/heartbeat`, { method: 'POST' })
+        .then(async (response) => {
+          if (!response.ok) {
+            logout()
+            return
+          }
+          const session = await response.json() as SessionStatusDto
+          idleLimitMsRef.current = (session.idleMinutes ?? 60) * 60 * 1000
+          lastActivityRef.current = Date.now()
+        })
+        .catch(() => logout())
+    }, 5 * 60 * 1000)
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, markActive))
+      window.clearInterval(idleInterval)
+      window.clearInterval(heartbeatInterval)
+    }
+  }, [logout, user])
 
   const login = async (email: string, password: string) => {
     const data = await requestAuth('/api/auth/login', { email, password })
-    const newUser = mapUser(data.user)
-
-    setUser(newUser)
-    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
-    localStorage.setItem('aiStudyHubToken', data.token)
+    persistSession(data, setUser)
+    lastActivityRef.current = Date.now()
   }
 
   const loginWithGoogleCredential = async (credential: string) => {
     const data = await requestAuth('/api/auth/google', { credential })
-    const newUser = mapUser(data.user)
-
-    setUser(newUser)
-    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
-    localStorage.setItem('aiStudyHubToken', data.token)
+    persistSession(data, setUser)
+    lastActivityRef.current = Date.now()
   }
 
   const loginWithGithubCode = async (code: string, redirectUri: string) => {
     const data = await requestAuth('/api/auth/github', { code, redirectUri })
-    const newUser = mapUser(data.user)
-
-    setUser(newUser)
-    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
-    localStorage.setItem('aiStudyHubToken', data.token)
+    persistSession(data, setUser)
+    lastActivityRef.current = Date.now()
   }
 
   const register = async (fullName: string, email: string, password: string) => {
     const data = await requestAuth('/api/auth/register', { fullName, email, password })
-    const newUser = mapUser(data.user)
-
-    setUser(newUser)
-    localStorage.setItem('aiStudyHubUser', JSON.stringify(newUser))
-    localStorage.setItem('aiStudyHubToken', data.token)
+    persistSession(data, setUser)
+    lastActivityRef.current = Date.now()
   }
 
   const updateUser = (nextUser: Partial<User>) => {
@@ -150,12 +216,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('aiStudyHubUser', JSON.stringify(updated))
       return updated
     })
-  }
-
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('aiStudyHubUser')
-    localStorage.removeItem('aiStudyHubToken')
   }
 
   return (

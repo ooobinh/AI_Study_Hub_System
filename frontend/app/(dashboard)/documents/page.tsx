@@ -30,7 +30,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,7 +105,7 @@ async function uploadFileToBackend(
   }
   formData.append("file", file)
 
-  const response = await fetch(`${getApiUrl()}/api/uploads/documents`, {
+  const response = await apiFetch(`${getApiUrl()}/api/uploads/documents`, {
     method: "POST",
     body: formData,
   })
@@ -341,9 +341,9 @@ export default function DocumentsPage() {
 
     try {
       const [documentsResponse, subjectsResponse, foldersResponse] = await Promise.all([
-        fetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
-        fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
-        fetch(`${getApiUrl()}/api/documents/folders?userId=${user.id}`),
+        apiFetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
+        apiFetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
+        apiFetch(`${getApiUrl()}/api/documents/folders?userId=${user.id}`),
       ])
       if (!documentsResponse.ok) {
         throw new Error(t("couldNotLoadDocuments"))
@@ -492,7 +492,7 @@ export default function DocumentsPage() {
 
     setIsCreatingFolder(true)
     setCreateFolderError("")
-    const response = await fetch(`${getApiUrl()}/api/documents/folders`, {
+    const response = await apiFetch(`${getApiUrl()}/api/documents/folders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ownerId: Number(user.id), name }),
@@ -516,7 +516,7 @@ export default function DocumentsPage() {
     if (!user) return
     setDocuments(prev => prev.map(doc => doc.id === id ? { ...doc, favorite: !doc.favorite } : doc))
 
-    const response = await fetch(`${getApiUrl()}/api/documents/${id}/favorite?userId=${user.id}`, { method: "POST" })
+    const response = await apiFetch(`${getApiUrl()}/api/documents/${id}/favorite?userId=${user.id}`, { method: "POST" })
     if (!response.ok) {
       setDocuments(prev => prev.map(doc => doc.id === id ? { ...doc, favorite: !doc.favorite } : doc))
       setError(t("couldNotUpdateFavorite"))
@@ -535,7 +535,7 @@ export default function DocumentsPage() {
 
   const deleteDocument = async (id: number) => {
     if (!user) return
-    const response = await fetch(`${getApiUrl()}/api/documents/${id}?userId=${user.id}`, { method: "DELETE" })
+    const response = await apiFetch(`${getApiUrl()}/api/documents/${id}?userId=${user.id}`, { method: "DELETE" })
     if (!response.ok) {
       const body = await response.json().catch(() => null)
       setError(body?.message || t("couldNotDeleteDocument"))
@@ -547,7 +547,7 @@ export default function DocumentsPage() {
 
   const shareDocument = async (doc: DocumentDto) => {
     if (!user) return
-    const response = await fetch(`${getApiUrl()}/api/documents/${doc.id}/share?sharedBy=${user.id}&permission=VIEW`, {
+    const response = await apiFetch(`${getApiUrl()}/api/documents/${doc.id}/share?sharedBy=${user.id}&permission=VIEW`, {
       method: "POST",
     })
     if (!response.ok) {
@@ -572,7 +572,7 @@ export default function DocumentsPage() {
   const saveEdit = async () => {
     if (!editingDoc || !user) return
 
-    const response = await fetch(`${getApiUrl()}/api/documents/${editingDoc.id}?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/documents/${editingDoc.id}?userId=${user.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -605,7 +605,7 @@ export default function DocumentsPage() {
     if (!movingDoc || !user) return
     const folderId = moveTargetFolderId ? Number(moveTargetFolderId) : null
 
-    const response = await fetch(`${getApiUrl()}/api/documents/${movingDoc.id}/folder?userId=${user.id}`, {
+    const response = await apiFetch(`${getApiUrl()}/api/documents/${movingDoc.id}/folder?userId=${user.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folderId }),

@@ -6,7 +6,7 @@ import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   Users,
   FileText,
@@ -97,7 +97,7 @@ const item = {
 }
 
 async function apiJson<T>(path: string) {
-  const response = await fetch(`${getApiUrl()}${path}`)
+  const response = await apiFetch(`${getApiUrl()}${path}`)
   if (!response.ok) {
     const error = await response.json().catch(() => null)
     throw new Error(error?.message || "Could not load admin data")
@@ -106,7 +106,7 @@ async function apiJson<T>(path: string) {
 }
 
 async function patchStatus<T>(path: string, status: string) {
-  const response = await fetch(`${getApiUrl()}${path}`, {
+  const response = await apiFetch(`${getApiUrl()}${path}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -121,7 +121,7 @@ async function patchStatus<T>(path: string, status: string) {
 }
 
 async function postJson<T>(path: string, body: unknown) {
-  const response = await fetch(`${getApiUrl()}${path}`, {
+  const response = await apiFetch(`${getApiUrl()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -353,7 +353,7 @@ export default function AdminPage() {
     setActionKey(`user-${id}`)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/admin/users/${id}?adminId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/admin/users/${id}?adminId=${user.id}`, {
         method: "DELETE",
       })
 

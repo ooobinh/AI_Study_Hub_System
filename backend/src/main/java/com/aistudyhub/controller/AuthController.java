@@ -15,6 +15,7 @@ import com.aistudyhub.dto.auth.LoginRequest;
 import com.aistudyhub.dto.auth.MessageResponse;
 import com.aistudyhub.dto.auth.RegisterRequest;
 import com.aistudyhub.dto.auth.ResetPasswordRequest;
+import com.aistudyhub.dto.auth.SessionStatusDto;
 import com.aistudyhub.dto.auth.UpdateProfileRequest;
 import com.aistudyhub.dto.auth.UserDto;
 import com.aistudyhub.service.AuthService;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -51,22 +53,37 @@ public class AuthController {
 
     @PostMapping("/register")
     public AuthResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        return authService.register(request, resolveFrontendUrl(httpRequest));
+        return authService.register(request, resolveFrontendUrl(httpRequest), httpRequest);
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
+    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        return authService.login(request, httpRequest);
     }
 
     @PostMapping("/google")
-    public AuthResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
-        return authService.googleLogin(request);
+    public AuthResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request, HttpServletRequest httpRequest) {
+        return authService.googleLogin(request, httpRequest);
     }
 
     @PostMapping("/github")
-    public AuthResponse githubLogin(@Valid @RequestBody GithubLoginRequest request) {
-        return authService.githubLogin(request);
+    public AuthResponse githubLogin(@Valid @RequestBody GithubLoginRequest request, HttpServletRequest httpRequest) {
+        return authService.githubLogin(request, httpRequest);
+    }
+
+    @PostMapping("/logout")
+    public MessageResponse logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return authService.logout(authorization);
+    }
+
+    @GetMapping("/session")
+    public SessionStatusDto session(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return authService.getSessionStatus(authorization);
+    }
+
+    @PostMapping("/session/heartbeat")
+    public SessionStatusDto heartbeat(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return authService.heartbeatSession(authorization);
     }
 
     @PostMapping("/forgot-password")
