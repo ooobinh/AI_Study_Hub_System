@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface DocumentDto {
   id: number
@@ -105,7 +105,7 @@ export default function DocumentViewerPage() {
         setTextPreview("")
         setPreviewMessage("")
 
-        const metadataResponse = await fetch(`${apiUrl}/api/documents/${documentId}?userId=${currentUser.id}`)
+        const metadataResponse = await apiFetch(`${apiUrl}/api/documents/${documentId}?userId=${currentUser.id}`)
         if (!metadataResponse.ok) {
           throw new Error("Document was not found or you do not have access.")
         }
@@ -117,7 +117,7 @@ export default function DocumentViewerPage() {
         const kind = getPreviewKind(metadata)
 
         if (kind === "pdf" || kind === "image" || kind === "text") {
-          const fileResponse = await fetch(fileEndpoint)
+          const fileResponse = await apiFetch(fileEndpoint)
           if (!fileResponse.ok) {
             throw new Error("Could not load this file preview.")
           }
@@ -132,7 +132,7 @@ export default function DocumentViewerPage() {
             setPreviewUrl(objectUrl)
           }
         } else {
-          const previewResponse = await fetch(`${apiUrl}/api/documents/${documentId}/preview?userId=${currentUser.id}`)
+          const previewResponse = await apiFetch(`${apiUrl}/api/documents/${documentId}/preview?userId=${currentUser.id}`)
           if (!previewResponse.ok) {
             throw new Error("Could not build a readable preview for this file.")
           }

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
-import { getApiUrl } from "@/lib/api"
+import { apiFetch, getApiUrl } from "@/lib/api"
 import {
   FileText,
   MessageSquare,
@@ -60,8 +60,8 @@ export default function DashboardPage() {
     if (!user) return
 
     Promise.all([
-      fetch(`${getApiUrl()}/api/documents/mine?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
-      fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
+      apiFetch(`${getApiUrl()}/api/documents/mine?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
+      apiFetch(`${getApiUrl()}/api/subjects?userId=${user.id}`).then((response) => response.ok ? response.json() : []),
     ])
       .then(([documentsData, subjectsData]: [DocumentDto[], SubjectDto[]]) => {
         setDocumentCount(documentsData.length)

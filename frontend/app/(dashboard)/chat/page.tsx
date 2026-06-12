@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface Message {
   id: string
@@ -104,7 +104,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user) return
 
-    fetch(`${getApiUrl()}/api/chat/sessions?userId=${user.id}`)
+    apiFetch(`${getApiUrl()}/api/chat/sessions?userId=${user.id}`)
       .then((response) => response.ok ? response.json() : [])
       .then((sessions: ChatSessionDto[]) => {
         setChatHistory(sessions.map((session) => ({
@@ -116,14 +116,14 @@ export default function ChatPage() {
       })
       .catch(() => setChatHistory([]))
 
-    fetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
+    apiFetch(`${getApiUrl()}/api/documents?userId=${user.id}`)
       .then((response) => response.ok ? response.json() : [])
       .then((data: DocumentOption[]) => setDocuments(data))
       .catch(() => setDocuments([]))
   }, [user])
 
   const loadMessages = async (sessionId: string) => {
-    const response = await fetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/messages`)
+    const response = await apiFetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/messages`)
     if (!response.ok) return
     const data = await response.json() as ChatMessageDto[]
     setMessages([
@@ -141,7 +141,7 @@ export default function ChatPage() {
     if (selectedChat) return selectedChat
     if (!user) throw new Error(t("loginFirst"))
 
-    const response = await fetch(`${getApiUrl()}/api/chat/sessions`, {
+    const response = await apiFetch(`${getApiUrl()}/api/chat/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -183,7 +183,7 @@ export default function ChatPage() {
 
     try {
       const sessionId = await ensureSession(question)
-      const response = await fetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/ask`, {
+      const response = await apiFetch(`${getApiUrl()}/api/chat/sessions/${sessionId}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messageText: question }),

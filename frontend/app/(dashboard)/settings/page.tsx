@@ -14,7 +14,7 @@ import { useTheme } from "next-themes"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import { isValidEmail } from "@/lib/validation"
 import {
   AlertTriangle,
@@ -129,7 +129,7 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
 }
 
 async function postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const response = await fetch(`${getApiUrl()}${path}`, {
+  const response = await apiFetch(`${getApiUrl()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -180,7 +180,7 @@ export default function SettingsPage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const { theme, setTheme } = useTheme()
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, logout } = useAuth()
   const updateUserRef = useRef(updateUser)
   const { t } = useLanguage()
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -225,7 +225,7 @@ export default function SettingsPage() {
     if (!user?.id) return
     setIsAccountLoading(true)
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/account/security?userId=${user.id}`)
+      const response = await apiFetch(`${getApiUrl()}/api/auth/account/security?userId=${user.id}`)
       const body = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(body?.message || "Could not load account security")
@@ -362,7 +362,7 @@ export default function SettingsPage() {
     setActionLoading("avatar")
     clearSectionFeedback("avatar")
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+      const response = await apiFetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "POST",
         body: formData,
       })
@@ -386,7 +386,7 @@ export default function SettingsPage() {
     setActionLoading("avatar-delete")
     clearSectionFeedback("avatar")
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+      const response = await apiFetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "DELETE",
       })
       const body = await response.json().catch(() => null)
@@ -433,7 +433,7 @@ export default function SettingsPage() {
     setActionLoading("profile")
     clearSectionFeedback("profile")
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/auth/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -496,6 +496,8 @@ export default function SettingsPage() {
         setCurrentPassword("")
         setNewPassword("")
         setConfirmPassword("")
+        setSectionFeedback("password", "success", "Password updated. Please sign in again.")
+        logout()
       }
     })
   }

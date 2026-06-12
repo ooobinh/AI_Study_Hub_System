@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import { useRef, useState } from "react"
 import { useAuth } from "@/components/providers/auth-provider"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 import {
   User,
   Mail,
@@ -111,7 +111,7 @@ export default function ProfilePage() {
     formData.append("file", file)
 
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+      const response = await apiFetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "POST",
         body: formData,
       })
@@ -138,7 +138,7 @@ export default function ProfilePage() {
     setAvatarMessage("")
     setIsAvatarSaving(true)
     try {
-      const response = await fetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
+      const response = await apiFetch(`${getApiUrl()}/api/auth/users/${user.id}/avatar`, {
         method: "DELETE",
       })
       const body = await response.json().catch(() => null)

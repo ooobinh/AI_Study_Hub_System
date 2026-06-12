@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface SubjectDto {
   id: number
@@ -106,8 +106,8 @@ export default function SubjectsPage() {
     setError("")
     try {
       const [subjectsResponse, documentsResponse] = await Promise.all([
-        fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
-        fetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
+        apiFetch(`${getApiUrl()}/api/subjects?userId=${user.id}`),
+        apiFetch(`${getApiUrl()}/api/documents?userId=${user.id}`),
       ])
 
       if (!subjectsResponse.ok) {
@@ -179,7 +179,7 @@ export default function SubjectsPage() {
     setError("")
     setMessage("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/subjects?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/subjects?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -219,7 +219,7 @@ export default function SubjectsPage() {
     setError("")
     setMessage("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/documents/${document.id}?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/documents/${document.id}?userId=${user.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subjectId: selectedSubject.id }),

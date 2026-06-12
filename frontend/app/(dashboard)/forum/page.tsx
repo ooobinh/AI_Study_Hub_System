@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider"
 import { useLanguage } from "@/components/providers/language-provider"
 import { LogoLoader } from "@/components/layout/logo-loader"
-import { getApiUrl, getNetworkErrorMessage } from "@/lib/api"
+import { apiFetch, getApiUrl, getNetworkErrorMessage } from "@/lib/api"
 
 interface ForumPostDto {
   id: number
@@ -182,7 +182,7 @@ export default function ForumPage() {
         params.set("type", typeFilter)
       }
       const query = params.toString()
-      const response = await fetch(`${getApiUrl()}/api/forum/posts${query ? `?${query}` : ""}`)
+      const response = await apiFetch(`${getApiUrl()}/api/forum/posts${query ? `?${query}` : ""}`)
       const body = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(body?.message || "Could not load forum")
@@ -210,7 +210,7 @@ export default function ForumPage() {
     setIsDetailLoading(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/forum/posts/${postId}`)
+      const response = await apiFetch(`${getApiUrl()}/api/forum/posts/${postId}`)
       const body = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(body?.message || "Could not load post")
@@ -226,8 +226,8 @@ export default function ForumPage() {
   const loadSidebarData = useCallback(async () => {
     try {
       const [rankingResponse, activeResponse] = await Promise.all([
-        fetch(`${getApiUrl()}/api/forum/rankings?period=${rankPeriod}`),
-        fetch(`${getApiUrl()}/api/forum/presence/active`),
+        apiFetch(`${getApiUrl()}/api/forum/rankings?period=${rankPeriod}`),
+        apiFetch(`${getApiUrl()}/api/forum/presence/active`),
       ])
 
       if (rankingResponse.ok) {
@@ -276,7 +276,7 @@ export default function ForumPage() {
     setError("")
     setMessage("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/forum/posts?authorId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/forum/posts?authorId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -328,7 +328,7 @@ export default function ForumPage() {
     try {
       setUploadProgress(20)
       setUploadLabel(`Uploading ${file.name}`)
-      const response = await fetch(`${getApiUrl()}/api/forum/posts/upload`, {
+      const response = await apiFetch(`${getApiUrl()}/api/forum/posts/upload`, {
         method: "POST",
         body: formData,
       })
@@ -378,7 +378,7 @@ export default function ForumPage() {
     setIsSavingAnswer(true)
     setError("")
     try {
-      const response = await fetch(`${getApiUrl()}/api/forum/posts/${selectedPostId}/answers?userId=${user.id}`, {
+      const response = await apiFetch(`${getApiUrl()}/api/forum/posts/${selectedPostId}/answers?userId=${user.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: answerText.trim() }),
