@@ -61,6 +61,17 @@ public class DocumentController {
         return documentService.list(search, subjectId, userId);
     }
 
+    // T-028: Tìm kiếm theo tag + category
+    @GetMapping("/search")
+    public List<DocumentDto> search(
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long userId
+    ) {
+        return documentService.searchByTagAndCategory(tag, categoryId, search, userId);
+    }
+
     @GetMapping("/mine")
     public List<DocumentDto> mine(@RequestParam Long userId) {
         return documentService.listOwned(userId);

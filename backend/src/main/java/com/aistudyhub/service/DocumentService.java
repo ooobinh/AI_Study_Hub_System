@@ -109,6 +109,90 @@ public class DocumentService {
                 keyword);
     }
 
+    // T-028: Tìm kiếm theo tag + category
+    public List<DocumentDto> searchByTagAndCategory(
+            String tag,
+            Long categoryId,
+            String search,
+            Long userId
+    ) {
+        String keyword = search == null || search.isBlank() ? "%" : "%" + search.trim() + "%";
+        Long effectiveUserId = userId == null ? -1L : userId;
+        Long effectiveCategoryId = categoryId == null ? -1L : categoryId;
+        String tagFilter = tag == null || tag.isBlank() ? null : tag.trim().toLowerCase();
+
+        boolean isAdmin = effectiveUserId != -1L && isAdminUser(effectiveUserId);
+
+        if (tagFilter != null) {
+            // Tìm kiếm có tag: JOIN qua document_tag_mapping + document_tags
+            String visibilityClause = isAdmin
+                    ? "AND d.status <> 'DELETED'"
+                    : """
+                      AND d.status <> 'DELETED'
+                      AND (
+                          (? = -1 AND d.visibility = 'PUBLIC')
+                          OR (? <> -1 AND (d.owner_id = ? OR d.visibility = 'PUBLIC'))
+                      )
+                      """;
+
+            String sql = baseSelect() + """
+                    INNER JOIN document_tag_mapping dtm ON dtm.document_id = d.document_id
+                    INNER JOIN document_tags dt ON dt.tag_id = dtm.tag_id
+                    WHERE LOWER(dt.tag_name) = ?
+                    """ + visibilityClause + """
+                      AND (? = -1 OR d.category_id = ?)
+                      AND (d.title LIKE ? OR d.description LIKE ? OR d.original_file_name LIKE ?)
+                    ORDER BY d.created_at DESC
+                    """;
+
+            if (isAdmin) {
+                return jdbcTemplate.query(sql, documentMapper,
+                        effectiveUserId,
+                        tagFilter,
+                        effectiveCategoryId, effectiveCategoryId,
+                        keyword, keyword, keyword);
+            } else {
+                return jdbcTemplate.query(sql, documentMapper,
+                        effectiveUserId,
+                        tagFilter,
+                        effectiveUserId, effectiveUserId, effectiveUserId,
+                        effectiveCategoryId, effectiveCategoryId,
+                        keyword, keyword, keyword);
+            }
+        } else {
+            // Không có tag: chỉ lọc category + keyword
+            String visibilityClause = isAdmin
+                    ? ""
+                    : """
+                      AND (
+                          (? = -1 AND d.visibility = 'PUBLIC')
+                          OR (? <> -1 AND (d.owner_id = ? OR d.visibility = 'PUBLIC'))
+                      )
+                      """;
+
+            String sql = baseSelect() + """
+                    WHERE d.status <> 'DELETED'
+                    """ + visibilityClause + """
+                      AND (? = -1 OR d.category_id = ?)
+                      AND (d.title LIKE ? OR d.description LIKE ? OR d.original_file_name LIKE ?)
+                    ORDER BY d.created_at DESC
+                    """;
+
+            if (isAdmin) {
+                return jdbcTemplate.query(sql, documentMapper,
+                        effectiveUserId,
+                        effectiveCategoryId, effectiveCategoryId,
+                        keyword, keyword, keyword);
+            } else {
+                return jdbcTemplate.query(sql, documentMapper,
+                        effectiveUserId,
+                        effectiveUserId, effectiveUserId, effectiveUserId,
+                        effectiveCategoryId, effectiveCategoryId,
+                        keyword, keyword, keyword);
+            }
+        }
+    }
+
     public List<DocumentDto> listForAdmin(Long adminId) {
         if (adminId == null || !isAdminUser(adminId)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Only admins can view all documents");
