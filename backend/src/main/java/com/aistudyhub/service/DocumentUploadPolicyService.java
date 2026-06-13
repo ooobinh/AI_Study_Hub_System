@@ -23,7 +23,7 @@ public class DocumentUploadPolicyService {
     private final long maxFileSizeBytes;
 
     public DocumentUploadPolicyService(
-            @Value("${app.upload.max-document-size-bytes:52428800}") long maxFileSizeBytes
+            @Value("${app.upload.max-document-size-bytes:10485760}") long maxFileSizeBytes
     ) {
         this.maxFileSizeBytes = maxFileSizeBytes;
     }
